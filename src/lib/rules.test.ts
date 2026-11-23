@@ -94,6 +94,11 @@ describe('見た目を重ねる', () => {
     for (const name of ['folder-git', 'gamepad', 'trash']) expect(iconOf(name)).toEqual({ iconName: lucideCanonical(name) });
     expect(iconOf('no-such-icon')).toBeUndefined();
     for (const old of ['logo', 'fixplor', 'fixplor-logo']) expect(iconOf(old)).toEqual({ iconName: 'fixplor-logo' });
+    // 独自アイコンの別名も、本来の名前に直して引く。探すときも、別名で見つかる（見つかるのは本来の名前）
+    expect(iconOf('brand-js')).toEqual({ iconName: 'brand-javascript' });
+    expect(iconOf('brand-node')).toEqual({ iconName: 'brand-nodejs' });
+    expect(searchIcons('brand-ts')).toContain('brand-typescript');
+    expect(searchIcons('brand-ts')).not.toContain('brand-ts');
     // 共通の独自アイコンは、登録簿の独自のアイコンとして引ける
     defineBrandIcons();
     expect(lookupIcon('fixplor-logo')).toMatchObject({ body: expect.stringContaining('<path') });
@@ -106,7 +111,7 @@ describe('見た目を重ねる', () => {
     for (const r of d) if (r.look.icon) expect(iconOf(r.look.icon), r.id).toBeDefined();
     const dirs: [string, RuleLook][] = [
       ['Desktop', { icon: 'monitor', hue: 104 }],
-      ['Downloads', { icon: 'folder-down', hue: 104 }],
+      ['Downloads', { icon: 'download', hue: 104 }],
       ['Documents', { icon: 'file-text', hue: 104 }],
       ['Pictures', { icon: 'image', hue: 104 }],
       ['Music', { icon: 'headphones', hue: 104 }],
@@ -155,6 +160,19 @@ describe('見た目を重ねる', () => {
       ['a.json', { icon: 'braces', hue: 109 }],
       ['a.jsonl', { icon: 'braces', hue: 109 }],
       ['a.epub', { icon: 'book-open', hue: 70 }],
+      ['a.rmd', { icon: 'brand-markdown', color: 'var(--text)' }],
+      ['a.markdown', { icon: 'brand-markdown', color: 'var(--text)' }],
+      ['a.pxd', { icon: 'brand-python', hue: 82 }],
+      ['a.ods', { icon: 'file-spreadsheet', hue: 155 }],
+      ['a.xlsm', { icon: 'file-spreadsheet', hue: 155 }],
+      ['a.docx', { icon: 'file-text', hue: 260 }],
+      ['a.odt', { icon: 'file-text', hue: 260 }],
+      ['a.pptx', { icon: 'file-chart-pie', hue: 227 }],
+      ['a.odp', { icon: 'file-chart-pie', hue: 227 }],
+      ['a.sha256', { icon: 'shield-check' }],
+      ['a.sha512', { icon: 'shield-check' }],
+      ['a.svgz', { icon: 'image' }],
+      ['a.svg', { icon: 'image' }],
     ];
     for (const [name, look] of files) expect(lookOf(e(name), d), name).toEqual(look);
     // 設定ファイル（色は指定なし）: 名前が一覧のどれかで終わる（ドットファイルも）

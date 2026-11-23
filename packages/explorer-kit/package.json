@@ -16,7 +16,7 @@
   },
   "peerDependencies": {
     "@3pino/app-kit-web": ">=0.6.2",
-    "@3pino/ui-kit-web": ">=0.3.4",
+    "@3pino/ui-kit-web": ">=0.3.5",
     "@lucide/svelte": "^1.53.0",
     "svelte": "^5.57.0"
   }

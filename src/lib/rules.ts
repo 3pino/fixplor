@@ -169,7 +169,7 @@ export function defaultRules(): AppearanceRule[] {
   const kind = (id: string, name: string, conditions: RuleCondition[], look: RuleLook): AppearanceRule => ({ id: `default-${id}`, name, enabled: true, conditions, look });
   return [
     named('Desktop', 'desktop', 'monitor'),
-    named('Downloads', 'downloads', 'folder-down'),
+    named('Downloads', 'downloads', 'download'),
     named('Documents', 'documents', 'file-text'),
     named('Pictures', 'pictures', 'image'),
     named('Music', 'music', 'headphones'),
@@ -182,10 +182,10 @@ export function defaultRules(): AppearanceRule[] {
     // フォルダ全般（色相 104 は、アプリの色）。下のファイルのルールより前にあるので、フォルダはどれも folder になる
     kind('folder', 'フォルダ', [{ field: 'kind', op: 'is', value: 'dir' }], { icon: 'folder', hue: 104 }),
     // ファイルの種類。名前で決まるもの（AI の指示・Playwright）を、拡張子で決まるものより前におく
-    kind('agents', 'AI エージェントの指示', exactly(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'copilot-instructions.md', 'QWEN.md', 'CONVENTIONS.md']), { icon: 'bot' }),
-    kind('playwright', 'Playwright の設定', [{ field: 'basename', op: 'startsWith', value: 'playwright.config.' }], { icon: 'brand-playwright', hue: 143 }),
-    kind('markdown', 'Markdown', ext(['md', 'mdx']), { icon: 'brand-markdown', color: 'var(--text)' }),
-    kind('python', 'Python', endsWith(['py.typed', 'py', 'pyc', 'pyd', 'pyi', 'pyo', 'pyw', 'pyx']), { icon: 'brand-python', hue: 82 }),
+    kind('agents', 'AGENTS.md', exactly(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'copilot-instructions.md', 'QWEN.md', 'CONVENTIONS.md']), { icon: 'bot' }),
+    kind('playwright', 'Playwright', [{ field: 'basename', op: 'startsWith', value: 'playwright.config.' }], { icon: 'brand-playwright', hue: 143 }),
+    kind('markdown', 'Markdown', ext(['md', 'mdx', 'markdown', 'rmd']), { icon: 'brand-markdown', color: 'var(--text)' }),
+    kind('python', 'Python', endsWith(['py.typed', 'py', 'pyc', 'pyd', 'pyi', 'pyo', 'pyw', 'pyx', 'pxi', 'pxd']), { icon: 'brand-python', hue: 82 }),
     kind('docker', 'Docker', endsWith(['dockerfile', 'dockerignore']), { icon: 'brand-docker', hue: 254 }),
     kind(
       'settings',
@@ -197,11 +197,14 @@ export function defaultRules(): AppearanceRule[] {
     kind('audio', '音声', ext(['aac', 'aif', 'aiff', 'ape', 'flac', 'm4a', 'mp3', 'oga', 'ogg', 'opus', 'pcm', 'spx', 'wav', 'wma', 'wv', 'wvc']), { icon: 'eighth-notes', hue: 240 }),
     kind('archive', 'アーカイブ', ext(['7z', 'bz', 'bz2', 'bz3', 'gz', 'rar', 'tgz', 'txz', 'xz', 'zip', 'zst']), { icon: 'folder-archive', hue: 76 }),
     kind('database', 'データベース', ext(['sql', 'sqlite', 'sqlite3']), { icon: 'database' }),
-    kind('spreadsheet', '表計算', ext(['xls', 'xlsx']), { icon: 'file-spreadsheet', hue: 155 }),
-    kind('table', '表（CSV・TSV）', ext(['csv', 'tsv']), { icon: 'table', hue: 145 }),
+    kind('spreadsheet', '表計算', ext(['xls', 'xlsx', 'xlsm', 'xlsb', 'xltx', 'xltm', 'xlt', 'ods', 'fods']), { icon: 'file-spreadsheet', hue: 155 }),
+    kind('table', 'CSV, TSV', ext(['csv', 'tsv']), { icon: 'table', hue: 145 }),
+    kind('document', 'ワードプロセッサ', ext(['doc', 'docx', 'docm', 'dotx', 'dotm', 'dot', 'odt', 'fodt']), {icon: 'file-text', hue: 260}),
+    kind('presentation', 'プレゼンテーション', ext(['ppt', 'pptx', 'pptm', 'potx', 'potm', 'pot', 'ppsx', 'ppsm', 'pps', 'odp', 'fodp']), {icon: 'file-chart-pie', hue: 227}),
     kind('json', 'JSON', ext(['cson', 'json', 'jsonc', 'jsonl']), { icon: 'braces', hue: 109 }),
     kind('ebook', '電子書籍', ext(['ebook', 'epub', 'mobi']), { icon: 'book-open', hue: 70 }),
-    { id: 'default-image', name: '画像', enabled: true, conditions: ext(['png', 'jpe?g', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']), look: { icon: 'image' } },
+    kind('sha', 'sha', ext(['sha1', 'sha224', 'sha256', 'sha384', 'sha512']), {icon: 'shield-check'}),
+    { id: 'default-image', name: '画像', enabled: true, conditions: ext(['png', 'jpe?g', 'gif', 'webp', 'svgz?', 'bmp', 'avif', 'ico']), look: { icon: 'image' } },
     { id: 'default-pdf', name: 'PDF', enabled: true, conditions: [{ field: 'ext', op: 'is', value: 'pdf' }], look: { icon: 'file-text' } },
     { id: 'default-file', name: 'ファイル', enabled: true, conditions: [{ field: 'kind', op: 'is', value: 'file' }], look: { icon: 'file' } },
   ];
