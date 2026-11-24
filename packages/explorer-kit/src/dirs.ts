@@ -18,7 +18,7 @@ export const EXPLORER_DIRS_MAX_BYTES = 24 * 1024;
 
 export const DEFAULT_DIR_VIEW: DirView = { view: 'details', sortKey: 'name', sortOrder: 'asc' };
 const VIEWS: readonly string[] = ['details', 'grid'];
-const KEYS: readonly string[] = ['name', 'modified', 'created', 'size'];
+const KEYS: readonly string[] = ['name', 'kind', 'modified', 'created', 'size'];
 const ORDERS: readonly string[] = ['asc', 'desc'];
 
 export function parseView(v: unknown): ViewMode | null {

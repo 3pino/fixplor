@@ -55,10 +55,10 @@ afterEach(async () => {
   explorerView.reset();
 });
 
-async function render(): Promise<HTMLElement> {
+async function render(extra: Record<string, unknown> = {}): Promise<HTMLElement> {
   target = document.createElement('div');
   document.body.appendChild(target);
-  instance = mount(FileExplorer, { target, props: { explorer } });
+  instance = mount(FileExplorer, { target, props: { explorer, ...extra } });
   flushSync();
   await vi.waitFor(() => expect(target!.querySelector('.file-explorer-list')).not.toBeNull());
   return target;
@@ -86,7 +86,7 @@ function menuLabels(el: HTMLElement): string[] {
 
 /** 上端の貼り付けを押す */
 function pasteClick(el: HTMLElement): void {
-  el.querySelector<HTMLButtonElement>('.file-explorer-selection button[aria-label="貼り付け"]')!.click();
+  el.querySelector<HTMLButtonElement>('.file-explorer-bar button[aria-label="貼り付け"]')!.click();
   flushSync();
 }
 
@@ -175,16 +175,62 @@ describe('置き場所の書き込み', () => {
     expect(h.write).not.toHaveBeenCalled();
   });
 
-  it('上端は共通の見出し（PanelBar = .top-bar）の 1 行: パス欄と、右の操作（検索・メニュー）。件数と選んだ項目の操作は下端', async () => {
+  it('上端の行の部品: 既定では、新しいファイル・フォルダは出さない。menuLayout.header で、出す・出さない・並べ替えができる。新しいフォルダは、フォルダを作る', async () => {
+    const labelsIn = (el: HTMLElement): string[] => [...el.querySelectorAll('.file-explorer-bar button[aria-label]:not(.file-explorer-crumb-chevron), .file-explorer-bar .file-explorer-path')].map((b) => b.getAttribute('aria-label') ?? 'パス');
+    let el = await render();
+    expect(labelsIn(el)).not.toContain('新しいフォルダ');
+    expect(labelsIn(el).indexOf('パス')).toBeLessThan(labelsIn(el).indexOf('コピー'));
+    await unmount(instance!);
+    target!.remove();
+    el = await render({ menuLayout: { header: { order: ['search', 'path'], hidden: ['copy', 'cut', 'paste'] } } });
+    const labels = labelsIn(el);
+    expect(labels.slice(0, 3)).toEqual(['検索', 'パス', '削除']);
+    for (const gone of ['コピー', '切り取り', '貼り付け']) expect(labels).not.toContain(gone);
+    expect(labels).toContain('新しいファイル'); // hidden を決めたので、既定の「出さない」は、引きずらない
+    el.querySelector<HTMLButtonElement>('.file-explorer-bar button[aria-label="新しいフォルダ"]')!.click();
+    flushSync();
+    expect(document.querySelector('.modal')?.textContent).toContain('新しいフォルダ');
+    expect(document.querySelector('.file-explorer-mkdir-hint')).toBeNull();
+    const input = document.querySelector<HTMLInputElement>('.file-explorer-mkdir input')!;
+    input.value = 'plain';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLFormElement>('.file-explorer-mkdir')!.requestSubmit();
+    await vi.waitFor(() => expect(h.mkdir).toHaveBeenCalledWith('plain'));
+    expect(h.write).not.toHaveBeenCalled();
+  });
+
+  it('パンくずの ▸ を押すと、その中のフォルダの一覧が出て、選ぶとそこへ移る。パスの欄には、押しても何もしない空きが残る', async () => {
+    const el = await render();
+    // パスの欄に、押しても何もしない空き（押すとパスの書き換え）
+    expect(el.querySelector('.file-explorer-path .file-explorer-path-gap')).not.toBeNull();
+    const chevron = el.querySelector<HTMLButtonElement>('.file-explorer-crumb-chevron')!;
+    chevron.click();
+    flushSync();
+    await vi.waitFor(() => expect([...document.querySelectorAll('.file-explorer-crumb-menu .menu-item')].map((b) => b.textContent?.trim())).toContain('docs'));
+    expect(el.querySelector('.file-explorer-path-input')).toBeNull(); // 押しただけでは、パスの書き換えに入らない
+    const files = [...document.querySelectorAll('.file-explorer-crumb-menu .menu-item')].map((b) => b.textContent?.trim());
+    expect(files).not.toContain('a.txt'); // フォルダだけ
+    [...document.querySelectorAll<HTMLElement>('.file-explorer-crumb-menu .menu-item')].find((b) => b.textContent?.trim() === 'docs')!.click();
+    flushSync();
+    expect(fileExplorer.dir).toBe('docs');
+    expect(document.querySelector('.file-explorer-crumb-menu')).toBeNull();
+    // こんどは docs のパンくずがあり、その ▸ でも出る
+    await vi.waitFor(() => expect(el.querySelectorAll('.file-explorer-crumb-chevron')).toHaveLength(2));
+    expect(el.querySelectorAll('.file-explorer-crumb-chevron')[1].getAttribute('aria-label')).toBe('docsの中のフォルダ');
+  });
+
+  it('上端は共通の見出し（PanelBar = .top-bar）: パス欄と、選んだ項目の操作・検索・メニュー。下端は件数', async () => {
     const el = await render();
     expect(el.querySelectorAll('header')).toHaveLength(1);
     const bar = el.querySelector('.panel-bar');
     expect(bar?.classList.contains('top-bar')).toBe(true);
     expect(bar?.querySelector('button[aria-label="メニュー"]')).not.toBeNull();
     expect(bar?.querySelector('.file-explorer-crumbs')).not.toBeNull();
-    expect(bar?.querySelector('.file-explorer-selection')).toBeNull();
+    // 選んだ項目の操作は、上端の行（パス欄の右）。下端は、件数だけ
+    for (const label of ['コピー', '切り取り', '貼り付け', '削除', '検索']) expect(bar?.querySelector(`button[aria-label="${label}"]`), label).not.toBeNull();
     const footer = el.querySelector('footer.file-explorer-footer');
-    expect(footer?.querySelector('.file-explorer-selection')).not.toBeNull();
+    expect(footer?.querySelector('.file-explorer-selection-count')).not.toBeNull();
+    expect(footer?.querySelector('button')).toBeNull();
     // 下端は、一覧の後（いちばん後ろ）
     expect(el.querySelector('.file-explorer')?.lastElementChild).toBe(footer);
   });
@@ -265,11 +311,11 @@ describe('項目の操作と貼り付け（コピー・切り取り・移動）'
     expect(itemMenuLabels(el, 'a.txt')).toEqual(['プロパティ']);
   });
 
-  it('貼り付けは選択のバーの中、削除の左。何も無ければ押せない（≡ には出さない）', async () => {
+  it('貼り付けは上端の行の中、削除の左。何も無ければ押せない（≡ には出さない）', async () => {
     const el = await render();
-    const labels = [...el.querySelectorAll('.file-explorer-selection-actions button')].map((b) => b.getAttribute('aria-label'));
+    const labels = [...el.querySelectorAll('.file-explorer-bar button')].map((b) => b.getAttribute('aria-label')).filter((l) => ['コピー', '切り取り', '貼り付け', '削除'].includes(l ?? ''));
     expect(labels).toEqual(['コピー', '切り取り', '貼り付け', '削除']);
-    const btn = el.querySelector<HTMLButtonElement>('.file-explorer-selection button[aria-label="貼り付け"]')!;
+    const btn = el.querySelector<HTMLButtonElement>('.file-explorer-bar button[aria-label="貼り付け"]')!;
     expect(btn.disabled).toBe(true);
     explorerBuffer.set('copy', [{ path: 'x/b.txt', kind: 'file' }]);
     flushSync();
@@ -605,9 +651,42 @@ describe('表示方法と並び順', () => {
     }
   });
 
+  it('名前が収まらないときに拡張子を残すため、ファイル名は、本体と拡張子の 2 つに分けて出す（文字は同じ。フォルダと拡張子の無いものは分けない）', async () => {
+    const el = await render();
+    const name = rowOf(el, 'a.txt').querySelector('.file-explorer-name-text')!;
+    expect(name.textContent).toBe('a.txt');
+    expect(name.querySelector('.file-explorer-name-stem')?.textContent).toBe('a');
+    expect(name.querySelector('.file-explorer-name-ext')?.textContent).toBe('.txt');
+    expect(rowOf(el, 'docs').querySelector('.file-explorer-name-stem')).toBeNull();
+    const css = (await import('node:fs')).readFileSync(KIT + 'FileExplorer.svelte', 'utf8').split('<style>')[1] ?? '';
+    expect(css).toMatch(/\.file-explorer-name-stem\s*\{[^}]*text-overflow:\s*ellipsis/);
+    expect(css).toMatch(/\.file-explorer-name-ext\s*\{[^}]*flex:\s*none/);
+  });
+
+  it('詳細の見出しを押すと、その列で並べ替える（もう一度押すと向きが入れ替わる）。今の並びの列に、向きの矢印が付く', async () => {
+    const el = await render();
+    const head = (label: string): HTMLElement => [...el.querySelectorAll<HTMLElement>('.file-explorer-col-sort')].find((b) => b.textContent?.trim() === label)!;
+    const arrow = (): string[] => [...el.querySelectorAll('.file-explorer-col-sort svg')].map((x) => x.getAttribute('aria-label') ?? '');
+    expect(arrow()).toEqual(['昇順']);
+    expect(head('名前').querySelector('svg')).not.toBeNull();
+    head('サイズ').click();
+    flushSync();
+    expect(explorerView.of('').sortKey).toBe('size');
+    expect(explorerView.of('').sortOrder).toBe('asc');
+    expect(head('サイズ').querySelector('svg')?.getAttribute('aria-label')).toBe('昇順');
+    expect(arrow()).toHaveLength(1);
+    head('サイズ').click();
+    flushSync();
+    expect(explorerView.of('').sortOrder).toBe('desc');
+    expect(head('サイズ').querySelector('svg')?.getAttribute('aria-label')).toBe('降順');
+    head('種類').click();
+    flushSync();
+    expect(explorerView.of('')).toMatchObject({ sortKey: 'kind', sortOrder: 'asc' });
+  });
+
   it('詳細は列の見出しを出し、種類・サイズ・更新日時を各項目に出す', async () => {
     const el = await render();
-    const heads = [...el.querySelectorAll('.file-explorer-columns span:not(.file-explorer-col-actions):not(.file-explorer-col-grip)')].map((x) => x.textContent);
+    const heads = [...el.querySelectorAll('.file-explorer-columns .file-explorer-col-label')].map((x) => x.textContent);
     expect(heads).toEqual(['名前', '種類', 'サイズ', '更新日時']);
     const pic = [...el.querySelectorAll('.file-explorer-item')].find((li) => li.textContent?.includes('pic.png'))!;
     expect(pic.querySelector('.file-explorer-col-kind')?.textContent).toBe('画像');
@@ -740,6 +819,22 @@ describe('名前の変更（名前を押すと、その場で入力欄になる�
     flushSync();
     expect(el.querySelector('.file-explorer-rename')).toBeNull();
     expect(h.move).not.toHaveBeenCalled();
+  });
+
+  it('書き換えを終えたら（Esc・変えずに Enter）、その項目にフォーカスが戻る。そのまま Enter で開ける', async () => {
+    dsk.desktop = true;
+    const el = await render();
+    for (const key of ['Escape', 'Enter']) {
+      rowOf(el, 'docs').querySelector<HTMLElement>('.file-explorer-row')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }));
+      flushSync();
+      el.querySelector<HTMLTextAreaElement>('.file-explorer-rename')!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      await vi.waitFor(() => expect(document.activeElement?.matches('.file-explorer-row')).toBe(true));
+      expect(document.activeElement?.closest('.file-explorer-item')?.getAttribute('data-path')).toBe('docs');
+      expect(el.querySelector('.file-explorer-rename')).toBeNull();
+    }
+    expect(h.move).not.toHaveBeenCalled();
+    (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(fileExplorer.dir).toBe('docs'));
   });
 
   it('名前の外（行のほか）を押すと、普通に開く。選択モードでは名前を押しても選び直すだけ', async () => {
@@ -2516,6 +2611,25 @@ describe('PC の操作（右クリックのメニュー・名前を押して書�
     expect(el.querySelector('.file-explorer-rename')).toBeNull();
   });
 
+  it('PC: 押した項目が、カーソル（フォーカス）になる。Ctrl で選びから外しても、カーソルは、その項目に残る（いつも 1 つ）', async () => {
+    dsk.desktop = true;
+    const el = await render();
+    const cursors = (): string[] => [...el.querySelectorAll('.file-explorer-item-cursor')].map((x) => x.getAttribute('data-path') ?? '');
+    const click = (name: string, init: MouseEventInit = {}): void => {
+      rowOf(el, name).querySelector<HTMLElement>('.file-explorer-row')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, ...init }));
+      flushSync();
+    };
+    click('a.txt', { ctrlKey: true });
+    click('docs', { ctrlKey: true });
+    expect(explorerSelection.paths().sort()).toEqual(['a.txt', 'docs']);
+    expect(cursors()).toEqual(['docs']);
+    expect(document.activeElement?.closest('.file-explorer-item')?.getAttribute('data-path')).toBe('docs');
+    click('a.txt', { ctrlKey: true }); // 選びから外す
+    expect(explorerSelection.paths()).toEqual(['docs']);
+    expect(cursors()).toEqual(['a.txt']);
+    expect(document.activeElement?.closest('.file-explorer-item')?.getAttribute('data-path')).toBe('a.txt');
+  });
+
   it('Ctrl を押しながら名前の文字を押すと、書き換えではなく、選びに足す', async () => {
     const el = await render();
     explorerSelection.replace(['docs']);
@@ -2693,6 +2807,21 @@ describe('キーボードの操作（PC）: 矢印で項目を移る・ホット
     press('ArrowDown');
     press('ArrowDown');
     expect(selected()).toEqual(['pic.png']);
+  });
+
+  it('矢印で移るときのフォーカスは、ブラウザのスクロールに任せない（見えない行を、画面の真ん中までスクロールさせない）', async () => {
+    await render();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      press('ArrowDown');
+      press('ArrowDown');
+      press('End', { ctrlKey: true });
+      const own = focus.mock.calls.filter((c) => c[0] !== undefined);
+      expect(own.length).toBeGreaterThan(0);
+      for (const c of focus.mock.calls) expect(c[0], 'フォーカスは preventScroll').toEqual({ preventScroll: true });
+    } finally {
+      focus.mockRestore();
+    }
   });
 
   it('何も選んでいないとき、上の矢印は末尾から始まる', async () => {
@@ -3161,7 +3290,7 @@ describe('列の幅・待つカーソル・戻ったときのフォーカス・�
     }
   });
 
-  it('上の階層へ上がると、いたフォルダが選ばれてフォーカスされる（どれだったか分かる）。下へ入るときは、何も選ばない', async () => {
+  it('上の階層へ上がると、いたフォルダが選ばれてフォーカスされる（どれだったか分かる）', async () => {
     fileExplorer.open('docs');
     const el = await render();
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-item')).not.toBeNull());
@@ -3174,11 +3303,12 @@ describe('列の幅・待つカーソル・戻ったときのフォーカス・�
   it('フォルダごとに、最後に選んだ項目を覚える。そのフォルダへ入る・戻るとき、そこを選び直す（上がったときは、いたフォルダ）', async () => {
     const el = await render();
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-item')).not.toBeNull());
-    // docs へ入る（覚えが無いので、何も選ばない）。そこで pic.png を選んで、上へ上がる（いたフォルダ docs が選ばれる）
+    // docs へ入る（覚えが無いので、最初の項目を選ぶ）。そこで pic.png を選んで、上へ上がる（いたフォルダ docs が選ばれる）
     fileExplorer.open('docs');
     await vi.waitFor(() => expect(h.list).toHaveBeenCalledWith('docs'));
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-item')).not.toBeNull());
-    expect(explorerSelection.paths()).toEqual([]);
+    await vi.waitFor(() => expect(explorerSelection.count).toBe(1));
+    expect(explorerSelection.paths()[0]).toBe(el.querySelector('.file-explorer-item')!.getAttribute('data-path'));
     explorerSelection.replace(['pic.png']);
     await vi.waitFor(() => expect(explorer.lastSelected.get('docs')).toBe('pic.png'));
     fileExplorer.up();

@@ -646,8 +646,7 @@ describe('タブ', () => {
   it('選んだフォルダを、新しいタブで開いてそこへ移る（Ctrl+Enter）・今のタブに残って開く（既定のキーは無し）・新しいウィンドウ（Ctrl+Shift+Enter）で開く', async () => {
     await start();
     await goTo('/home/me');
-    const docsRow = [...target.querySelectorAll<HTMLElement>('.file-explorer-item')].find((li) => li.dataset.path === 'home/me/docs')!;
-    docsRow.querySelector<HTMLElement>('.file-explorer-row')!.click();
+    // 移ると、最初の項目（docs）が選ばれている
     await settle();
     // 選んだものが無いとき・ファイルのときは、何もしない
     await key('Enter', { ctrlKey: true });
@@ -656,6 +655,7 @@ describe('タブ', () => {
     // 今のタブに残って開く操作（キーは、設定で付ける）
     await click(tabEls()[0].querySelector('.tab-main')!);
     hotkeys.set('file.openNewTab', ['Ctrl+Alt+Enter']);
+    // 画面を作り直した（タブを切り替えた）ので、最初の項目は選ばれていない。選ぶ
     [...target.querySelectorAll<HTMLElement>('.file-explorer-item')].find((li) => li.dataset.path === 'home/me/docs')!.querySelector<HTMLElement>('.file-explorer-row')!.click();
     await settle();
     await key('Enter', { ctrlKey: true, altKey: true });
@@ -677,6 +677,8 @@ describe('タブ', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t: string) => void written.push(t) }, configurable: true });
     await start();
     await goTo('/home/me');
+    await settle();
+    await key('Escape', {}); // 移ると最初の項目が選ばれているので、選びを外す
     await key('C', { ctrlKey: true, shiftKey: true });
     expect(written.at(-1)).toBe('/home/me');
     const row = [...target.querySelectorAll<HTMLElement>('.file-explorer-item')].find((li) => li.dataset.path === 'home/me/a.txt')!;
@@ -706,6 +708,46 @@ describe('左の欄: ブックマークとドライブ・戻る／進む', () =>
     expect(marks()).toEqual(['me']);
     expect(drives()).toEqual(['自宅']);
     expect(JSON.parse(localStorage.getItem('fixplor.bookmarks')!).map((b: { name: string }) => b.name)).toEqual(['me']);
+  });
+
+  it('ビューの設定で、場所の欄（デスクトップ）を出さないにできる（もとに戻すと出る）', async () => {
+    await start();
+    expect(target.querySelector('nav.places')).not.toBeNull();
+    settings.views = { hidden: ['places'], swipe: 'places' };
+    await settle();
+    expect(target.querySelector('nav.places')).toBeNull();
+    expect(target.querySelector('.places-resizer')).toBeNull();
+    settings.views = { hidden: [], swipe: 'places' };
+    await settle();
+    expect(target.querySelector('nav.places')).not.toBeNull();
+  });
+
+  it('設定の「ビュー」のトグルで、場所の欄の出す・出さないを切り替えて保存する（デスクトップ。Android の「右スワイプで出す画面」の選びは出さない）', async () => {
+    await start();
+    await click(target.querySelector('.about-row')!);
+    const sw = target.querySelector<HTMLElement>('.settings-views [role="switch"]')!;
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    expect(target.querySelector('.settings-swipe-view')).toBeNull();
+    await click(sw);
+    expect(settings.views.hidden).toEqual(['places']);
+    expect(JSON.parse(localStorage.getItem('fixplor.views')!).hidden).toEqual(['places']);
+    await click(target.querySelector<HTMLElement>('.settings-views [role="switch"]')!);
+    expect(settings.views.hidden).toEqual([]);
+  });
+
+  it('ブックマークにアイコンを付ける（見た目のルールどおり。一覧のフォルダと同じ。ルールが無ければ folder）。ドライブには付けない', async () => {
+    places.add('自宅', 'https://nas.example/dav/');
+    await start();
+    await goTo('/home/me/docs');
+    await click(target.querySelector<HTMLButtonElement>('button[aria-label="いま開いているフォルダをブックマークに追加"]')!);
+    const icons = (): (string | null)[] => [...target.querySelectorAll('section[aria-label="ブックマーク"] .place-open .place-icon svg')].map((s) => s.getAttribute('data-icon'));
+    expect(marks()).toEqual(['me', 'docs']);
+    expect(icons()).toEqual(['folder', 'folder']);
+    expect(target.querySelector('section[aria-label="ドライブ"] .place-icon')).toBeNull();
+    // ルールを変えると、ブックマークのアイコンも変わる
+    settings.rules = [{ id: 'x', name: 'docs', enabled: true, conditions: [{ field: 'stem', op: 'is', value: 'docs' }], look: { icon: 'book', hue: 30 } }];
+    await settle();
+    expect(icons()).toEqual(['folder', 'book']);
   });
 
   it('＋で、いま開いているフォルダを足す（足したものは、もう足せない）。右クリック（長押し）のメニューから、新しいタブで開く・ブックマークから削除', async () => {

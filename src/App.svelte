@@ -11,7 +11,7 @@
   import TabBar from './components/TabBar.svelte';
   import IconButton from '@3pino/ui-kit-web/IconButton.svelte';
   import MenuItem from '@3pino/ui-kit-web/MenuItem.svelte';
-  import { baseName, createExplorer, ExplorerBuffer, type Explorer, type FolderSizeCache, type ExplorerApi, type EntryUrls, type Rules } from '@3pino/explorer-kit';
+  import { baseName, createExplorer, ExplorerBuffer, type Entry, type Explorer, type FolderSizeCache, type ExplorerApi, type EntryUrls, type Rules } from '@3pino/explorer-kit';
   import Toasts from '@3pino/app-kit-web/shell/Toasts.svelte';
   import ConfirmDialog from '@3pino/app-kit-web/shell/ConfirmDialog.svelte';
   import { hotkeys } from './lib/hotkeys.svelte';
@@ -38,6 +38,7 @@
   import { HostState, createHost, externalOpener, failureText } from './lib/host.svelte';
   import { placeLabel } from './lib/labels';
   import { entryStyleOf } from './lib/ruleStyle';
+  import { viewShown } from './lib/views';
   import { allFilesGranted, openAllFilesSettings } from './lib/allFiles';
   import { startBackNav, type BackNav } from '@3pino/app-kit-web/core/backNav';
   import { places as saved, type DavPlace } from './lib/places.svelte';
@@ -501,6 +502,8 @@
         openTabStay: () => openAt(b.place, b.dir, 'tabStay'),
         openWindow: () => openAt(b.place, b.dir, 'window'),
         remove: () => bookmarks.remove(b.id),
+        // アイコン・色は、一覧のフォルダと同じ見た目のルールで決める
+        look: entryStyleOf({ name: baseName(b.dir), path: b.dir, kind: 'dir', size: 0, modified: 0, mime: null } as Entry, settings.rules),
       })),
   );
 
@@ -958,8 +961,9 @@
     />
 
     <div class="body">
-      <!-- 設定の画面では、場所の欄（と、狭い画面の幕）は出さない（設定は、タブの 1 つ。場所を選ぶ必要がない） -->
-      {#if !activeSettings}
+      <!-- 設定の画面では、場所の欄（と、狭い画面の幕）は出さない（設定は、タブの 1 つ。場所を選ぶ必要がない）。
+           デスクトップでは、設定の「ビュー」で場所の欄を「出さない」にできる。Android は、右スワイプで引き出す画面（この欄）を選ぶ（いまはこれだけ） -->
+      {#if !activeSettings && (android ? settings.views.swipe === 'places' : viewShown(settings.views, 'places'))}
       <!-- 狭い画面: 場所の欄が開いているあいだ、残りを暗くする幕。押すと閉じる -->
       <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
       <div class="nav-scrim" class:nav-scrim-open={navOpen} onclick={() => (navOpen = false)}></div>
@@ -1033,10 +1037,16 @@
         {/if}
         {#key current}
           <FileExplorer {explorer} keymap={hotkeys.keymap} columnWidths={settings.columns} oncolumnwidths={(w) => (settings.columns = w)} menuLayout={settings.menus} entryStyle={(e) => entryStyleOf(e, settings.rules)}>
-            {#snippet lead()}
-              <IconButton label="戻る" title="戻る" disabled={!host.canBack} onclick={() => host.back()}><ArrowLeft size={16} /></IconButton>
-              <IconButton label="進む" title="進む" disabled={explorer.nav.future.length === 0} onclick={() => explorer?.nav.forward()}><ArrowRight size={16} /></IconButton>
-              <IconButton label="上のフォルダへ" title="上のフォルダへ" disabled={explorer.nav.dir === ''} onclick={() => explorer?.nav.up()}><ArrowUp size={16} /></IconButton>
+            {#snippet headerItem(id)}
+              {#if id === 'back'}
+                <IconButton label="戻る" title="戻る" disabled={!host.canBack} onclick={() => host.back()}><ArrowLeft size={16} /></IconButton>
+              {:else if id === 'forward'}
+                <IconButton label="進む" title="進む" disabled={explorer.nav.future.length === 0} onclick={() => explorer?.nav.forward()}><ArrowRight size={16} /></IconButton>
+              {:else if id === 'up'}
+                <IconButton label="上のフォルダへ" title="上のフォルダへ" disabled={explorer.nav.dir === ''} onclick={() => explorer?.nav.up()}><ArrowUp size={16} /></IconButton>
+              {:else if id === 'hidden'}
+                <IconButton label="隠しファイルを表示" title="隠しファイルを表示" active={settings.showHidden} aria-pressed={settings.showHidden} onclick={() => toggleHidden()}><Eye size={18} /></IconButton>
+              {/if}
             {/snippet}
             {#snippet entryMenu(e, close)}
               {#if e.kind === 'dir' && !e.trash}

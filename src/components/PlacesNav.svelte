@@ -18,6 +18,8 @@
     remove?: () => void;
     /** 設定を直す・外す（ネットワークの場所だけ） */
     edit?: () => void;
+    /** 見た目のルールが決めた、アイコン・色・不透明度（ブックマークだけ。一覧のフォルダと同じ見た目） */
+    look?: EntryStyle | null;
   };
 </script>
 
@@ -29,9 +31,10 @@
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import IconButton from '@3pino/ui-kit-web/IconButton.svelte';
+  import Icon from '@3pino/ui-kit-web/Icon.svelte';
   import Menu from '@3pino/ui-kit-web/Menu.svelte';
   import MenuItem from '@3pino/ui-kit-web/MenuItem.svelte';
-  import { EXPLORER_DRAG_DIR_TYPE, EXPLORER_DRAG_TYPE, explorerDragItems } from '@3pino/explorer-kit';
+  import { EXPLORER_DRAG_DIR_TYPE, EXPLORER_DRAG_TYPE, explorerDragItems, type EntryStyle } from '@3pino/explorer-kit';
 
   // 左の欄の中身。上から「ブックマーク」（追加・削除できる。フォルダをドラッグして落としても足せる）、「ドライブ」（この端末のドライブ・SD カード・WSL・ネットワークの場所）。
   // 項目を右クリック（長押し）すると、新しいタブ・新しいウィンドウで開く・ブックマークから外す、のメニュー。
@@ -289,7 +292,8 @@
       onclick={e.open}
       oncontextmenu={(ev) => openMenu(ev, e)}
     >
-      {e.label}{#if e.broken}<span class="place-broken" role="img" aria-label="つながりません">!</span>{/if}
+      <!-- ブックマークのアイコン: 見た目のルールどおり（一覧のフォルダと同じ。ルールが無ければ、folder） -->
+      {#if sortable}<span class="place-icon" style:color={e.look?.color} style:opacity={e.look?.opacity} aria-hidden="true"><Icon icon={e.look?.icon && 'iconName' in e.look.icon ? e.look.icon.iconName : 'folder'} size={16} /></span>{/if}<span class="place-label" style:opacity={sortable ? e.look?.opacity : undefined}>{e.label}</span>{#if e.broken}<span class="place-broken" role="img" aria-label="つながりません">!</span>{/if}
     </button>
     {#if e.edit}
       <IconButton label={`「${e.label}」を直す`} title="直す・外す" onclick={e.edit}><Pencil size={14} /></IconButton>
@@ -433,6 +437,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* ブックマークのアイコン（色はルールのもの。無ければ文字の色）。文字は長ければ 「…」 */
+  .place-icon {
+    flex: none;
+    display: inline-flex;
+    vertical-align: middle;
+    margin-right: var(--space-3);
+  }
+  .place-label {
+    vertical-align: middle;
   }
   .place-broken {
     margin-left: var(--space-2);

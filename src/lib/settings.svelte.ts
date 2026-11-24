@@ -1,6 +1,7 @@
 import { getItem, setItem } from '@3pino/app-kit-web/core/storage';
 import { parseMenuLayouts, type ColumnWidths, type MenuLayouts } from '@3pino/explorer-kit';
 import { defaultRules, parseRules, type AppearanceRule } from './rules';
+import { parseViews, type ViewSettings } from './views';
 
 /** 見た目のルール。保存したものが無ければ、初めから入っているルール（全部消したときは「[]」を保存するので、空のまま） */
 const initialRules = (raw: string | null): AppearanceRule[] => (raw === null ? defaultRules() : parseRules(raw));
@@ -8,7 +9,7 @@ const initialRules = (raw: string | null): AppearanceRule[] => (raw === null ? d
 // 各デバイスに保存する設定（localStorage）。隠しファイルを出すか・フォルダごとの表示方法と並び順。
 // 使うキーは localKeys.ts に登録する（試験が止める）。
 
-const KEYS = { showHidden: 'fixplor.showHidden', dirs: 'fixplor.dirs', columns: 'fixplor.columns', menus: 'fixplor.menus', rules: 'fixplor.rules' } as const;
+const KEYS = { showHidden: 'fixplor.showHidden', dirs: 'fixplor.dirs', columns: 'fixplor.columns', menus: 'fixplor.menus', rules: 'fixplor.rules', views: 'fixplor.views' } as const;
 
 /** 読む・書く（localStorage を直接は使わず、土台のストレージを通す。使えない環境や容量不足でも落ちない） */
 export const read = (key: string): string | null => getItem(key);
@@ -43,6 +44,7 @@ class Settings {
   #columns = $state.raw<ColumnWidths>(parseColumns(read(KEYS.columns)));
   #menus = $state.raw<MenuLayouts>(parseMenuLayouts(read(KEYS.menus)));
   #rules = $state.raw<AppearanceRule[]>(initialRules(read(KEYS.rules)));
+  #views = $state.raw<ViewSettings>(parseViews(read(KEYS.views)));
 
   get showHidden(): boolean {
     return this.#showHidden;
@@ -77,6 +79,15 @@ class Settings {
   set rules(list: AppearanceRule[]) {
     this.#rules = list;
     write(KEYS.rules, JSON.stringify(list));
+  }
+
+  /** ビュー（場所の欄など）の出す・出さない（デスクトップ）と、右スワイプで引き出す画面（Android） */
+  get views(): ViewSettings {
+    return this.#views;
+  }
+  set views(v: ViewSettings) {
+    this.#views = v;
+    write(KEYS.views, JSON.stringify(v));
   }
 
   get dirs(): unknown {

@@ -2,22 +2,32 @@
 
 import type { Entry } from './types';
 
-/** 並べる key（名前・更新日時・作成日時・サイズ）と向き。作成日時を持たない項目は、いちばん古い扱い */
-export type SortKey = 'name' | 'modified' | 'created' | 'size';
+/** 並べる key（名前・種類・更新日時・作成日時・サイズ）と向き。作成日時を持たない項目は、いちばん古い扱い */
+export type SortKey = 'name' | 'kind' | 'modified' | 'created' | 'size';
 export type SortOrder = 'asc' | 'desc';
 
 const byName = (a: Entry, b: Entry) => a.name.localeCompare(b.name, 'ja', { numeric: true, sensitivity: 'base' });
 
 /**
  * 並び順: フォルダは向きに関係なく先。同じ種類の中を key で並べる（向きは asc・desc）。
- * 同じ値のものは、向きに関係なく名前の順（大文字・小文字・数字の桁を区別しない）
+ * 同じ値のものは、向きに関係なく名前の順（大文字・小文字・数字の桁を区別しない）。
+ * 種類（kind）で並べるときは、種類の文字を返す kindOf（一覧の「種類」の列と同じもの）を渡す（無ければ、名前の順）
  */
-export function sortEntries(entries: Iterable<Entry>, key: SortKey = 'name', order: SortOrder = 'asc'): Entry[] {
+export function sortEntries(entries: Iterable<Entry>, key: SortKey = 'name', order: SortOrder = 'asc', kindOf?: (e: Entry) => string): Entry[] {
   const dir = order === 'asc' ? 1 : -1;
   return [...entries].sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
     if (key === 'name') return byName(a, b) * dir;
-    const c = key === 'modified' ? a.modified - b.modified : key === 'created' ? (a.created ?? 0) - (b.created ?? 0) : a.size - b.size;
+    const c =
+      key === 'kind'
+        ? kindOf
+          ? kindOf(a).localeCompare(kindOf(b), 'ja', { numeric: true, sensitivity: 'base' })
+          : 0
+        : key === 'modified'
+          ? a.modified - b.modified
+          : key === 'created'
+            ? (a.created ?? 0) - (b.created ?? 0)
+            : a.size - b.size;
     // 同じ値の中は、向きに関係なく名前の順
     return c !== 0 ? c * dir : byName(a, b);
   });
@@ -29,6 +39,13 @@ export function kindLabel(e: Entry, isImage: (name: string, mime?: string | null
   if (isImage(e.name, e.mime)) return '画像';
   const dot = e.name.lastIndexOf('.');
   return dot > 0 && dot < e.name.length - 1 ? e.name.slice(dot + 1).toUpperCase() : 'ファイル';
+}
+
+/** 名前を、名前の本体と拡張子（ドット付き。`.txt`）に分ける。収まらないとき、拡張子は残して、本体を省略するために使う。拡張子が無い・長すぎる（10 文字より長い）ときは、分けない */
+export function splitExt(name: string): [string, string] {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0 || dot === name.length - 1 || name.length - dot > 10) return [name, ''];
+  return [name.slice(0, dot), name.slice(dot)];
 }
 
 /** パン屑（置き場所のいちばん上から、いまのフォルダまで）。path は各階層のパス */

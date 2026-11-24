@@ -14,7 +14,10 @@
   import SettingRow from '@3pino/ui-kit-web/SettingRow.svelte';
   import StatusLine from '@3pino/ui-kit-web/StatusLine.svelte';
   import type { UpdateState } from '@3pino/app-kit-web/updater';
-  import { isDesktopWindowsOrLinuxTauri, osName } from '@3pino/app-kit-web/core/platform';
+  import Toggle from '@3pino/ui-kit-web/Toggle.svelte';
+  import { isAndroid, isDesktopWindowsOrLinuxTauri, osName } from '@3pino/app-kit-web/core/platform';
+  import { settings } from '../lib/settings.svelte';
+  import { viewShown, VIEWS } from '../lib/views';
   import { desktopOs } from '../lib/dependencies';
   import DependencySettings from './DependencySettings.svelte';
   import MenuSettings from './MenuSettings.svelte';
@@ -52,6 +55,12 @@
   /** 外部のコマンドの「依存」は、デスクトップだけ（Android・ブラウザーでは、出さない） */
   const depOs = isDesktopWindowsOrLinuxTauri() ? desktopOs(osName()) : null;
   const mb = (n: number): string => (n / 1024 / 1024).toFixed(1);
+  /** Android は、ビューを「出す・出さない」ではなく、右スワイプで引き出す画面を選ぶ */
+  const android = isAndroid();
+  const setViewShown = (id: string, on: boolean): void => {
+    const hidden = settings.views.hidden.filter((x) => x !== id);
+    settings.views = { ...settings.views, hidden: on ? hidden : [...hidden, id] };
+  };
 
   onMount(() => void updater.loadVersion());
   // ホットキーの画面では、「戻る」の操作は、設定のいちばん上へ戻る
@@ -67,7 +76,7 @@
     {#if sub}
       <IconButton label="設定へ戻る" title="戻る" onclick={() => (sub = null)}><ArrowLeft size={18} /></IconButton>
     {/if}
-    <span class="settings-title">{sub === 'hotkeys' ? 'ホットキー' : sub === 'menus' ? '右クリックのメニュー' : sub === 'rules' ? '見た目のルール' : sub === 'dependencies' ? '依存' : '設定'}</span>
+    <span class="settings-title">{sub === 'hotkeys' ? 'ホットキー' : sub === 'menus' ? '上端の行・右クリックのメニュー' : sub === 'rules' ? '見た目のルール' : sub === 'dependencies' ? '依存' : '設定'}</span>
   </PanelBar>
   <div class="scroll settings-body">
     <div class="settings-content">
@@ -86,7 +95,7 @@
               <span class="settings-operation-icon" aria-hidden="true"><Keyboard size={16} /><ChevronRight size={18} /></span>
             {/snippet}
           </SettingRow>
-          <SettingRow name="右クリックのメニュー" description="出す項目と、その順番" class="settings-operation-row settings-link-menus" onclick={() => (sub = 'menus')}>
+          <SettingRow name="上端の行・右クリックのメニュー" description="出す部品・項目と、その順番" class="settings-operation-row settings-link-menus" onclick={() => (sub = 'menus')}>
             {#snippet control()}
               <span class="settings-operation-icon" aria-hidden="true"><SquareMenu size={16} /><ChevronRight size={18} /></span>
             {/snippet}
@@ -102,6 +111,26 @@
                 <span class="settings-operation-icon" aria-hidden="true"><Package size={16} /><ChevronRight size={18} /></span>
               {/snippet}
             </SettingRow>
+          {/if}
+        </Section>
+
+        <Section title="ビュー" class="settings-views">
+          {#if android}
+            <SettingRow name="右スワイプで出す画面" description="画面の左の端から右へスワイプしたときに出す画面" class="settings-swipe-view">
+              {#snippet control()}
+                <select class="select" aria-label="右スワイプで出す画面" value={settings.views.swipe} onchange={(ev) => (settings.views = { ...settings.views, swipe: ev.currentTarget.value })}>
+                  {#each VIEWS as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
+                </select>
+              {/snippet}
+            </SettingRow>
+          {:else}
+            {#each VIEWS as v (v.id)}
+              <SettingRow name={v.label} description="画面に出す" class="settings-view-row">
+                {#snippet control()}
+                  <Toggle checked={viewShown(settings.views, v.id)} label={`${v.label}を出す`} onchange={(on) => setViewShown(v.id, on)} />
+                {/snippet}
+              </SettingRow>
+            {/each}
           {/if}
         </Section>
 

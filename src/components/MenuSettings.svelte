@@ -6,19 +6,21 @@
   import SortableList from '@3pino/ui-kit-web/SortableList.svelte';
   import StatusLine from '@3pino/ui-kit-web/StatusLine.svelte';
   import Toggle from '@3pino/ui-kit-web/Toggle.svelte';
-  import { ENTRY_MENU_ITEMS, menuOrder, reorderMenu, setMenuHidden, SPACE_MENU_ITEMS, type MenuItemDef, type MenuLayout, type MenuLayouts } from '@3pino/explorer-kit';
+  import { ENTRY_MENU_ITEMS, HEADER_ITEMS, headerLayout, menuOrder, reorderMenu, setMenuHidden, SPACE_MENU_ITEMS, type MenuItemDef, type MenuLayout, type MenuLayouts } from '@3pino/explorer-kit';
   import { settings } from '../lib/settings.svelte';
 
-  // 設定の「右クリックのメニュー」: 項目の右クリックと、空きの右クリックに出す項目を、並べ替え・出す／出さないの切り替えで決める。
+  // 設定の「メニュー」: 上端の行の部品と、項目の右クリック・空きの右クリックに出す項目を、並べ替え・出す／出さないの切り替えで決める。
   // 並べ替えは共通の SortableList（行をドラッグ。行にフォーカスして上下キー）。出す条件（選んだ数・書けるか など）は、ここで決めない（出す項目でも、使えないときは出ない）。
 
-  type Which = 'entry' | 'space';
+  type Which = 'header' | 'entry' | 'space';
   const MENUS: { which: Which; title: string; hint: string; items: readonly MenuItemDef[] }[] = [
+    { which: 'header', title: '上端の行', hint: 'パス欄の左右に並べる部品（右端の ≡ は、いつも出ます）', items: HEADER_ITEMS },
     { which: 'entry', title: 'ファイル・フォルダを右クリック', hint: '選んだ項目のメニュー', items: ENTRY_MENU_ITEMS },
     { which: 'space', title: '空きを右クリック', hint: 'フォルダの何もないところのメニュー', items: SPACE_MENU_ITEMS },
   ];
 
-  const layoutOf = (which: Which): MenuLayout | undefined => settings.menus[which];
+  /** 上端の行は、決めていなければ、既定（出さない部品がある）。右クリックのメニューは、全部出す */
+  const layoutOf = (which: Which): MenuLayout | undefined => (which === 'header' ? headerLayout(settings.menus.header) : settings.menus[which]);
   const defaultsOf = (items: readonly MenuItemDef[]): string[] => items.map((i) => i.id);
   /** 並べている項目（出さないものも含む）。表示の順 */
   function rows(which: Which, items: readonly MenuItemDef[]): { id: string; label: string; shown: boolean }[] {
@@ -51,7 +53,7 @@
         </SettingRow>
       {/snippet}
     </SortableList>
-    {#if allHidden(m.which, m.items)}
+    {#if m.which !== 'header' && allHidden(m.which, m.items)}
       <StatusLine kind="warn">全部を出さないので、右クリックしてもメニューは出ません。</StatusLine>
     {/if}
     <div class="menu-settings-actions">

@@ -8,8 +8,8 @@ export type MenuLayout = {
   hidden?: readonly string[];
 };
 
-/** メニューごとの並び（entry: 項目の右クリック。space: 空きの右クリック） */
-export type MenuLayouts = { entry?: MenuLayout; space?: MenuLayout };
+/** 並びと表示（entry: 項目の右クリックのメニュー。space: 空きの右クリックのメニュー。header: 上端の行の部品） */
+export type MenuLayouts = { entry?: MenuLayout; space?: MenuLayout; header?: MenuLayout };
 
 export type MenuItemDef = { id: string; label: string };
 
@@ -31,6 +31,32 @@ export const SPACE_MENU_ITEMS: readonly MenuItemDef[] = [
   { id: 'newFile', label: '新しいファイル' },
   { id: 'paste', label: '貼り付け' },
 ];
+
+/**
+ * 上端の行にある部品（既定の順）。戻る・進む・上へ・隠しファイルは、本体が足す（`headerItem`）。
+ * パスは、残りの幅を使う。右端の ≡（メニュー）は、いつも出す
+ */
+export const HEADER_ITEMS: readonly MenuItemDef[] = [
+  { id: 'back', label: '戻る' },
+  { id: 'forward', label: '進む' },
+  { id: 'up', label: '上のフォルダへ' },
+  { id: 'path', label: 'パス' },
+  { id: 'selectAll', label: 'すべて選ぶ' },
+  { id: 'copy', label: 'コピー' },
+  { id: 'cut', label: '切り取り' },
+  { id: 'paste', label: '貼り付け' },
+  { id: 'delete', label: '削除' },
+  { id: 'search', label: '検索' },
+  { id: 'hidden', label: '隠しファイルの表示' },
+  { id: 'newFile', label: '新しいファイル' },
+  { id: 'newFolder', label: '新しいフォルダ' },
+];
+
+/** 上端の行で、決めていないときに出さない部品（足したいときだけ、設定で出す） */
+export const HEADER_DEFAULT_HIDDEN: readonly string[] = ['hidden', 'newFile', 'newFolder'];
+
+/** 上端の行の並びと出さない部品。決めていなければ、既定（HEADER_DEFAULT_HIDDEN を出さない） */
+export const headerLayout = (layout?: MenuLayout): MenuLayout => layout ?? { order: [], hidden: [...HEADER_DEFAULT_HIDDEN] };
 
 /** 表示の順（出さない項目も含む）。知らない ID は捨て、並べていない項目は、既定の順で後ろに続く */
 export function menuOrder(defaults: readonly string[], layout?: MenuLayout): string[] {
@@ -73,7 +99,7 @@ export function parseMenuLayouts(raw: string | null): MenuLayouts {
       const o = x as Record<string, unknown>;
       return { order: strings(o.order), hidden: strings(o.hidden) };
     };
-    return { entry: one(v.entry), space: one(v.space) };
+    return { entry: one(v.entry), space: one(v.space), header: one(v.header) };
   } catch {
     return {};
   }

@@ -77,7 +77,7 @@ npm test -w @3pino/explorer-kit        # 決まり・状態・画面の試験（
 
 元に戻す・やり直しの履歴（`explorerHistory`。`history.ts`）は、アプリで 1 つ持ちます（名前の変更・移動・コピー・新しいファイル・ゴミ箱へ移す。ゴミ箱から戻せる置き場所だけ）。
 
-本体は、`<FileExplorer>` に次の部品（Snippet）を渡して、画面に足せます: `lead`（上端の、パス欄の前。戻る・進む・上へなど）・`menu`（≡ のメニューの先頭の項目）・`entryMenu`（項目の右クリックのメニューの終わりの項目。1 件を選んでいるとき。引数は、選んだ項目とメニューを閉じる関数）。戻る・進むの履歴は `explorer.nav`（`back()`・`forward()`・`future`）。
+本体は、`<FileExplorer>` に次の部品（Snippet）を渡して、画面に足せます: `headerItem`（上端の行に足す部品。引数は ID: `back`・`forward`・`up`・`hidden`。並びと出す／出さないは `menuLayout.header`）・`menu`（≡ のメニューの先頭の項目）・`entryMenu`（項目の右クリックのメニューの終わりの項目。1 件を選んでいるとき。引数は、選んだ項目とメニューを閉じる関数）。戻る・進むの履歴は `explorer.nav`（`back()`・`forward()`・`future`）。
 
 詳細の列の幅は、`columnWidths`（px。`kind`・`size`・`modified`・`created`）で渡し、見出しの境目をつまんで変えたら `oncolumnwidths` で知らせます（保存は本体）。数えたフォルダのサイズの写しは `createExplorer({ folderSizeCache })` で、同じ置き場所のエクスプローラー（タブ）どうしで共有できます。
 

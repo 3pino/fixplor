@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Entry } from './types';
 import * as listing from './listing';
 import { basicViewerKind, isImageName } from './kinds';
-import { breadcrumbs, sortEntries } from './listing';
+import { breadcrumbs, sortEntries, splitExt } from './listing';
 
 const kindLabel = (x: Entry): string => listing.kindLabel(x, isImageName);
 const entryAction = (x: Entry): string => listing.entryAction(x, basicViewerKind);
@@ -35,6 +35,13 @@ describe('sortEntries（並べ方と向き）', () => {
   });
   it('名前の降順は、フォルダを先に、名前を逆に', () => {
     expect(sortEntries(list(), 'name', 'desc').map((x) => x.name)).toEqual(['zdir', 'c.txt', 'b.txt', 'a.txt']);
+  });
+  it('種類の順: 渡した種類の文字で並べる（フォルダは先。同じ種類は名前の順）。種類の文字が無ければ、名前の順', () => {
+    const kinds = [e('b.txt'), e('a.png'), e('c.txt'), e('d.md'), e('zdir', 'dir')];
+    const kindOf = (x: { name: string; kind: string }) => (x.kind === 'dir' ? 'フォルダ' : x.name.split('.').pop()!.toUpperCase());
+    expect(sortEntries(kinds, 'kind', 'asc', kindOf).map((x) => x.name)).toEqual(['zdir', 'd.md', 'a.png', 'b.txt', 'c.txt']);
+    expect(sortEntries(kinds, 'kind', 'desc', kindOf).map((x) => x.name)).toEqual(['zdir', 'b.txt', 'c.txt', 'a.png', 'd.md']);
+    expect(sortEntries(kinds, 'kind').map((x) => x.name)).toEqual(['zdir', 'a.png', 'b.txt', 'c.txt', 'd.md']);
   });
 });
 
@@ -118,5 +125,16 @@ describe('パス欄の文字（pathToText・textToPath）', () => {
     expect(r('/home/me/../you', 'a/b')).toBe('home/you');
     expect(r('home/me', 'a/b')).toBe('home/me');
     expect(r('.hidden', 'a/b')).toBe('.hidden'); // .hidden は、.. や . ではない
+  });
+});
+
+describe('splitExt（収まらないとき、拡張子を残すための分け方）', () => {
+  it('最後のドットから分ける。ドットで始まるだけ・末尾がドット・拡張子が長すぎるときは分けない', () => {
+    expect(splitExt('verylongfilename.txt')).toEqual(['verylongfilename', '.txt']);
+    expect(splitExt('a.tar.gz')).toEqual(['a.tar', '.gz']);
+    expect(splitExt('.env')).toEqual(['.env', '']);
+    expect(splitExt('name.')).toEqual(['name.', '']);
+    expect(splitExt('noext')).toEqual(['noext', '']);
+    expect(splitExt('a.thisisverylong')).toEqual(['a.thisisverylong', '']);
   });
 });
