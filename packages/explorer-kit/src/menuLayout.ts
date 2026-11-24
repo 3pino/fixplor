@@ -47,6 +47,7 @@ export const HEADER_ITEMS: readonly MenuItemDef[] = [
   { id: 'paste', label: '貼り付け' },
   { id: 'delete', label: '削除' },
   { id: 'search', label: '検索' },
+  { id: 'sort', label: '並び替え' },
   { id: 'hidden', label: '隠しファイルの表示' },
   { id: 'newFile', label: '新しいファイル' },
   { id: 'newFolder', label: '新しいフォルダ' },

@@ -5,11 +5,10 @@
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import FileIcon from '@lucide/svelte/icons/file';
-  import FileText from '@lucide/svelte/icons/file-text';
   import Folder from '@lucide/svelte/icons/folder';
-  import ImageIcon from '@lucide/svelte/icons/image';
   import Upload from '@lucide/svelte/icons/upload';
   import FilePlus from '@lucide/svelte/icons/file-plus';
+  import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down';
   import FolderPlus from '@lucide/svelte/icons/folder-plus';
   import X from '@lucide/svelte/icons/x';
   import ClipboardPaste from '@lucide/svelte/icons/clipboard-paste';
@@ -20,7 +19,7 @@
   import Info from '@lucide/svelte/icons/info';
   import Pencil from '@lucide/svelte/icons/pencil';
   import IconButton from '@3pino/ui-kit-web/IconButton.svelte';
-  import NamedIcon from '@3pino/ui-kit-web/Icon.svelte';
+  import EntryGlyph from './EntryGlyph.svelte';
   import PanelBar from '@3pino/ui-kit-web/PanelBar.svelte';
   import Button from '@3pino/ui-kit-web/Button.svelte';
   import Modal from '@3pino/ui-kit-web/Modal.svelte';
@@ -46,6 +45,7 @@
   import { displayEntry, entryLabel, trashItemOf, trashPlace, virtualDir, writeBlockReason } from './trashFolder';
   import { allWholeTrash, copyBlockedReason, cutBlockedReason, deleteBlockedReason, transferItemOf } from './selection';
   import { formatSize, formatStamp } from './format';
+  import { isSvgName } from './kinds';
   import type { Explorer } from './explorer';
   import { EXPLORER_HOTKEYS, matchesHotkey, type ExplorerHotkeyId, type Keymap } from './hotkeys';
   import { copyEntry, createEntry, explorerHistory, moveEntry, trashEntry } from './history';
@@ -72,6 +72,8 @@
     menuLayout?: MenuLayouts;
     /** 項目ごとの見た目（アイコン・色・不透明度）を決める。条件に合わない項目は null（既定の見た目）。詳細・アイコンの両方で使う */
     entryStyle?: (e: Entry) => EntryStyle | null;
+    /** カーソル（PC のフォーカスのある項目）が変わったとき。無ければ null（タッチでは、いつも null）。プレビューなどの別のビューが見る */
+    oncursor?: (e: Entry | null) => void;
   } = $props();
   const ENTRY_IDS = ENTRY_MENU_ITEMS.map((i) => i.id);
   const HEADER_IDS = HEADER_ITEMS.map((i) => i.id);
@@ -217,6 +219,10 @@
       // 上がったときは、いたフォルダ。それ以外（下へ入る・戻る・進む）は、そのフォルダで最後に選んだ項目
       if (rest) revealPath = childPath(dir, rest.split('/')[0]);
       else revealPath = explorer.lastSelected.get(dir) ?? null;
+      // 親フォルダのビューが押した項目（このフォルダ直下のもの）があれば、それを最優先
+      const asked = explorer.revealRequest;
+      explorer.revealRequest = null;
+      if (asked !== null && parentOf(asked) === dir) revealPath = asked;
     });
   });
   // フォルダごとに、最後に選んだ項目を覚える（空にしたときは、前のものを残す）
@@ -391,6 +397,8 @@
 
   // 操作のメニュー（≡）。項目を選んだら閉じてから動く
   let menuOpen = $state(false);
+  /** 上端の行の「並び替え」ボタンのメニュー */
+  let sortMenuOpen = $state(false);
   function run(fn: () => void): void {
     menuOpen = false;
     fn();
@@ -518,6 +526,12 @@
   }
   /** いま「カーソル」がある項目（行にフォーカスがあればそれ。なければ、最後に移ったもの。なければ、選んでいる最後のもの） */
   let cursorPath = $state<string | null>(null);
+  /** カーソルのある項目（PC だけ。一覧にあるもの） */
+  const cursorEntry = $derived(explorerSelection.desktop && cursorPath !== null ? (shownEntries.find((x) => x.path === cursorPath) ?? null) : null);
+  $effect(() => {
+    const e = cursorEntry;
+    untrack(() => props.oncursor?.(e));
+  });
   /** 矢印で、項目を移る。動かしたら true（端で動かないときも、一覧の中なら true にして、画面のスクロールを止める） */
   function moveCursor(dir: 'up' | 'down' | 'left' | 'right', extend: boolean): boolean {
     const items = [...(bodyEl?.querySelectorAll<HTMLElement>('.file-explorer-item') ?? [])];
@@ -1375,6 +1389,7 @@
   let pressTimer: ReturnType<typeof setTimeout> | undefined;
   // 画面を閉じたあとに、長押し・名前の書き換え・メニューの待ちが動いて、選びを変えないようにする
   onDestroy(() => {
+    props.oncursor?.(null);
     clearTimeout(pressTimer);
     clearTimeout(renameTimer);
     clearTimeout(ctxTimer);
@@ -1799,6 +1814,40 @@
   }
 
   /** 入力欄を出したら、拡張子の前までを選ぶ（すぐ打ち替えられるように） */
+  /**
+   * 上端の行を必ず 1 行にする。部品は折り返す並べ方にしておき、次の行へ回った部品を隠す（data-clipped。隠したぶんは、どこにも出さない）。
+   * 幅や部品が変わるたびに、いったん全部出して測り直す
+   */
+  function fitBar(sentinel: HTMLElement): { destroy(): void } | void {
+    const box = sentinel.parentElement;
+    if (!box) return;
+    let frame = 0;
+    const measure = (): void => {
+      frame = 0;
+      const kids = [...box.children].filter((k) => k !== sentinel) as HTMLElement[];
+      for (const k of kids) k.removeAttribute('data-clipped');
+      const first = kids.find((k) => k.getClientRects().length > 0);
+      if (!first) return;
+      const top = first.getBoundingClientRect().top;
+      for (const k of kids) if (k.getClientRects().length > 0 && k.getBoundingClientRect().top > top + 6) k.setAttribute('data-clipped', '');
+    };
+    const schedule = (): void => {
+      if (frame === 0) frame = requestAnimationFrame(measure);
+    };
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    ro?.observe(box);
+    const mo = typeof MutationObserver === 'undefined' ? null : new MutationObserver(schedule);
+    mo?.observe(box, { childList: true });
+    schedule();
+    return {
+      destroy() {
+        if (frame !== 0) cancelAnimationFrame(frame);
+        ro?.disconnect();
+        mo?.disconnect();
+      },
+    };
+  }
+
   function focusName(input: HTMLTextAreaElement): void {
     fitName(input);
     input.focus();
@@ -2297,8 +2346,9 @@
   ondragleave={explorerDragLeave}
 >
   <!-- 上端: 部品（戻る・進む・上へ・パス・選んだ項目の操作・検索など。並びと出す／出さないは、利用者が決める）と、右端の ≡。
-       パス欄は、残りの幅を使う。狭いときは、部品が次の行へ回る -->
+       パス欄は、残りの幅を使う。必ず 1 行。狭いときはパス欄を最小幅まで縮め、それでも入らない部品は、右から順に隠す（fitBar） -->
   <PanelBar class="file-explorer-bar">
+    <span hidden use:fitBar></span>
     {#each headerIds as id (id)}
       {@render headerPart(id)}
     {/each}
@@ -2318,11 +2368,7 @@
             <MenuItem onclick={() => run(() => setView(v))}>{VIEW_LABEL[v]}{#if dirView.view === v}<Check size={14} />{/if}</MenuItem>
           {/each}
           <p class="file-explorer-menu-head muted">並び替え</p>
-          {#each sortKeys as k (k)}
-            <MenuItem onclick={() => run(() => explorerView.setSort(fileExplorer.dir, k, dirView.sortOrder))}>{KEY_LABEL[k]}{#if dirView.sortKey === k}<Check size={14} />{/if}</MenuItem>
-          {/each}
-          <MenuItem onclick={() => run(() => explorerView.setSort(fileExplorer.dir, dirView.sortKey, 'asc'))}>昇順{#if dirView.sortOrder === 'asc'}<Check size={14} />{/if}</MenuItem>
-          <MenuItem onclick={() => run(() => explorerView.setSort(fileExplorer.dir, dirView.sortKey, 'desc'))}>降順{#if dirView.sortOrder === 'desc'}<Check size={14} />{/if}</MenuItem>
+          {@render sortItems(() => (menuOpen = false))}
         </Menu>
       {/if}
     </span>
@@ -2518,7 +2564,7 @@
             {/snippet}
             {#snippet row()}
               {#if dirView.view === 'grid'}
-                <span class="file-explorer-thumb">
+                <span class="file-explorer-thumb" class:file-explorer-thumb-alpha={thumb && isSvgName(e.name, e.mime)}>
                   {#if thumb}
                     <img src={thumb} alt="" loading="lazy" decoding="async" />
                   {:else if pdf && PdfThumb}
@@ -2658,11 +2704,30 @@
     {/if}
   {:else if id === 'search'}
     <IconButton label="検索" title="検索（Ctrl+F）" active={search.open} aria-pressed={search.open} onclick={() => (search.open ? closeSearch() : openSearch())}><SearchIcon size={18} /></IconButton>
+  {:else if id === 'sort'}
+    <!-- 並び替え（≡ の中の「並び替え」と同じ。開いているフォルダの設定） -->
+    <span class="file-explorer-popup">
+      <IconButton label="並び替え" title="並び替え" active={sortMenuOpen} aria-haspopup="menu" aria-expanded={sortMenuOpen} onclick={() => (sortMenuOpen = !sortMenuOpen)}><ArrowUpDown size={18} /></IconButton>
+      {#if sortMenuOpen}
+        <Menu class="file-explorer-popup-menu file-explorer-menu" label="並び替え" onclose={() => (sortMenuOpen = false)}>
+          {@render sortItems(() => (sortMenuOpen = false))}
+        </Menu>
+      {/if}
+    </span>
   {:else if id === 'newFile'}
     <IconButton label="新しいファイル" title="新しいファイル" disabled={!canCreate} onclick={() => openMkdir()}><FilePlus size={18} /></IconButton>
   {:else if id === 'newFolder'}
     <IconButton label="新しいフォルダ" title="新しいフォルダ" disabled={!canCreate} onclick={() => openMkdir(true)}><FolderPlus size={18} /></IconButton>
   {/if}
+{/snippet}
+
+<!-- 並び替えの項目（≡ のメニューと、上端の行の「並び替え」ボタンの両方で使う。選んだあと、close でメニューを閉じる） -->
+{#snippet sortItems(close: () => void)}
+  {#each sortKeys as k (k)}
+    <MenuItem onclick={() => { close(); explorerView.setSort(fileExplorer.dir, k, dirView.sortOrder); }}>{KEY_LABEL[k]}{#if dirView.sortKey === k}<Check size={14} />{/if}</MenuItem>
+  {/each}
+  <MenuItem onclick={() => { close(); explorerView.setSort(fileExplorer.dir, dirView.sortKey, 'asc'); }}>昇順{#if dirView.sortOrder === 'asc'}<Check size={14} />{/if}</MenuItem>
+  <MenuItem onclick={() => { close(); explorerView.setSort(fileExplorer.dir, dirView.sortKey, 'desc'); }}>降順{#if dirView.sortOrder === 'desc'}<Check size={14} />{/if}</MenuItem>
 {/snippet}
 
 <!-- パンくず 1 つ（名前のボタンと、その中のフォルダの一覧を開く ▸） -->
@@ -2681,15 +2746,7 @@
 
 <!-- 項目のアイコン（本体が決めた見た目があればそれ。無ければ、種類のアイコン） -->
 {#snippet glyph(look: EntryStyle | null, kind: string, size: number)}
-  {@const custom = look?.icon}
-  {#if custom && typeof custom === 'function'}
-    {@const Custom = custom}
-    <Custom {size} />
-  {:else if custom && 'iconName' in custom}
-    <NamedIcon icon={custom.iconName} {size} />
-  {:else if custom}
-    <img class="file-explorer-glyph-img" src={custom.src} alt="" width={size} height={size} />
-  {:else if kind === 'enter'}<Folder {size} />{:else if kind === 'image'}<ImageIcon {size} />{:else if kind === 'pdf'}<FileText {size} />{:else}<FileIcon {size} />{/if}
+  <EntryGlyph {look} {kind} {size} />
 {/snippet}
 
 {#if bandBox}
@@ -2891,14 +2948,17 @@
     padding-top: calc(env(safe-area-inset-top) + 6px);
     padding-left: 8px;
   }
-  /* 部品が並びきらないときは、次の行へ回す（パス欄は、残りの幅を使い、最低限の幅は残す） */
+  /* 部品が並びきらないときは、折り返す（パス欄は、残りの幅を使い、最小幅は残す）。折り返した部品は fitBar が隠す（必ず 1 行） */
   .file-explorer > :global(.file-explorer-bar .panel-bar-main) {
     gap: 0;
     flex-wrap: wrap;
   }
+  .file-explorer > :global(.file-explorer-bar .panel-bar-main > [data-clipped]) {
+    display: none !important;
+  }
   /* パス欄: 入力欄のような見た目（押すと書き換えられる）。パンくずは、はみ出したら横にスクロールする */
   .file-explorer-path {
-    flex: 1 1 12em;
+    flex: 1 1 9em;
     min-width: 9em;
     display: flex;
     align-items: center;
@@ -3432,6 +3492,12 @@
     color: var(--entry-color, var(--text-muted));
     overflow: hidden;
   }
+  /* SVG は透ける（線の色は黒）ので、白と灰色の市松模様を敷く */
+  .file-explorer-thumb-alpha {
+    background-color: #fff;
+    background-image: conic-gradient(#c8c8c8 25%, transparent 0 50%, #c8c8c8 0 75%, transparent 0);
+    background-size: 16px 16px;
+  }
   /* 画像は欠けないよう、全体を枠に収める（枠に地の色は付けない） */
   .file-explorer-thumb img {
     width: 100%;
@@ -3472,9 +3538,6 @@
     justify-content: center;
     width: 18px;
     color: var(--entry-color, var(--text-muted));
-  }
-  .file-explorer-glyph-img {
-    object-fit: contain;
   }
   .file-explorer-name {
     flex: 1;

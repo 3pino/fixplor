@@ -119,7 +119,7 @@
             <SettingRow name="右スワイプで出す画面" description="画面の左の端から右へスワイプしたときに出す画面" class="settings-swipe-view">
               {#snippet control()}
                 <select class="select" aria-label="右スワイプで出す画面" value={settings.views.swipe} onchange={(ev) => (settings.views = { ...settings.views, swipe: ev.currentTarget.value })}>
-                  {#each VIEWS as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
+                  {#each VIEWS.filter((x) => x.drawer) as v (v.id)}<option value={v.id}>{v.label}</option>{/each}
                 </select>
               {/snippet}
             </SettingRow>

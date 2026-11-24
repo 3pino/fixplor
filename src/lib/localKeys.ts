@@ -16,6 +16,8 @@ export const LOCAL_KEYS: readonly LocalKey[] = [
   { key: 'fixplor.hotkeys', owner: 'lib/hotkeys.svelte.ts', purpose: '利用者が変えたホットキー（既定と違う操作だけ）', kind: 'state' },
   { key: 'fixplor.tabs', owner: 'App.svelte', purpose: '開いているタブ（置き場所と開いているフォルダ）と、見ているタブ。起動で戻す', kind: 'state' },
   { key: 'fixplor.placesWidth', owner: 'App.svelte', purpose: '左の場所の欄の幅（px）', kind: 'state' },
+  { key: 'fixplor.parentsWidth', owner: 'App.svelte', purpose: '親フォルダのビューの幅（px）', kind: 'state' },
+  { key: 'fixplor.previewWidth', owner: 'App.svelte', purpose: 'プレビューのビューの幅（px）', kind: 'state' },
   { key: 'fixplor.places', owner: 'lib/places.svelte.ts', purpose: '追加したネットワークの場所（名前と URL）', kind: 'state' },
   { key: 'fixplor.bookmarks', owner: 'lib/bookmarks.svelte.ts', purpose: 'ブックマーク（置き場所とフォルダ）。左の欄の上の節', kind: 'state' },
   { key: 'fixplor.updateCheckedAt', owner: 'lib/updateWatch.ts', purpose: 'アプリの更新を最後に確認した時刻', kind: 'cache' },

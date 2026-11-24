@@ -48,6 +48,11 @@ export type Explorer = {
   /** フォルダごとに、最後に選んだ項目（パス）。戻る・下へ入る・上がるとき、そこを選び直す（アプリを閉じるまで。保存はしない） */
   lastSelected: Map<string, string>;
   /**
+   * 次にフォルダを移ったときに、一覧で選んでカーソルを置く項目のパス（親フォルダのビューが、押した項目を一覧で見せるために立てる）。
+   * 移り先のフォルダ直下の項目で、一覧にあれば、上へ上がったときの「いたフォルダ」より優先する。使ったら空にする
+   */
+  revealRequest: string | null;
+  /**
    * いまドラッグしている項目（このエクスプローラーの一覧から始めたもの）を、別のフォルダへ移す・コピーする。画面（FileExplorer）が付ける。
    * 一覧の外のドロップ先（左の欄のブックマークなど）が使う。ドラッグしていないときは、何もしない
    */
@@ -127,6 +132,7 @@ export function createExplorer(options: ExplorerOptions): Explorer {
     search,
     folderSizeCache,
     lastSelected,
+    revealRequest: null,
     dropDragged: null,
   };
 }

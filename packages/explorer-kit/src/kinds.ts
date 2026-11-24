@@ -1,6 +1,11 @@
 // 名前と種類（mime）から、ファイルの種類を見分ける。本体が別の見分け方を持たないときの既定（ExplorerHost.isImage・viewerKind に渡せる）。
 
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|avif)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i;
+
+/** SVG か（<img> で描くときは、スクリプトは動かず、currentColor は黒になる。透けるので、下に市松模様を敷く） */
+export function isSvgName(name: string, mime?: string | null): boolean {
+  return mime === 'image/svg+xml' || /\.svg$/i.test(name);
+}
 
 /** 画像か。mime が画像ならそれで決める。mime が無い・汎用（application/octet-stream）のときは拡張子で見る */
 export function isImageName(name: string, mime?: string | null): boolean {

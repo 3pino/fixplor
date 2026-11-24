@@ -59,6 +59,8 @@ beforeEach(() => {
   bookmarks.reload();
   settings.showHidden = false;
   settings.dirs = {};
+  // 一覧の横のビュー（親フォルダ・プレビュー）は、読み込みの回数を数える試験のじゃまになるので、既定では出さない（試験で必要なときだけ出す）
+  settings.views = { hidden: ['parents', 'preview'], swipe: 'places' };
   localStorage.clear();
   fake.calls.length = 0;
   fake.tree.clear();
@@ -94,6 +96,83 @@ describe('fixplor の画面（この端末のファイル）', () => {
     expect([...target.querySelectorAll('.file-explorer-crumb')].map((c) => c.textContent)).toEqual(['コンピューター', 'home', 'me']);
     expect(target.querySelector('input[aria-label="場所"]')).toBeNull();
     expect([...target.querySelectorAll('.places .menu-item')].map((b) => b.textContent)).toEqual(['me', 'コンピューター']);
+  });
+
+  describe('一覧の横のビュー（親フォルダ・プレビュー）', () => {
+    const parentRows = (): string[] => [...target.querySelectorAll('.parent-view .parent-name')].map((n) => n.textContent ?? '');
+    const current = (): string | undefined => target.querySelector('.parent-view [aria-current="true"] .parent-name')?.textContent ?? undefined;
+    const arrow = async (key: string): Promise<void> => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await settle();
+    };
+
+    it('親フォルダ: 親の中身を全部並べ、いま開いているフォルダを選んでいる背景にする。フォルダを押すとそこへ移る', async () => {
+      settings.views = { hidden: ['preview'], swipe: 'places' };
+      app = mount(App, { target });
+      await settle();
+      expect(parentRows()).toEqual(['me']);
+      expect(current()).toBe('me');
+      expect(target.querySelector('.side-pane[aria-label="親フォルダ"]')).not.toBeNull();
+      expect(target.querySelector('.side-pane[aria-label="プレビュー"]')).toBeNull();
+      // docs へ入ると、親は me（docs・a.txt。隠しファイルは出さない）
+      row('docs').querySelector<HTMLElement>('.file-explorer-row')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await settle();
+      await vi.waitFor(() => expect(parentRows()).toEqual(['docs', 'a.txt']));
+      expect(current()).toBe('docs');
+      // 親の中の項目（ファイル）を押すと、一覧がその親フォルダを開き、その項目を選んでフォーカスする
+      const prow = (name: string): HTMLButtonElement => [...target.querySelectorAll<HTMLButtonElement>('.parent-row')].find((b) => b.textContent?.trim() === name)!;
+      const selectedInMain = (): string[] => [...target.querySelectorAll('.file-explorer-item-selected .file-explorer-name-text')].map((n) => n.textContent ?? '');
+      prow('a.txt').click();
+      await settle();
+      await vi.waitFor(() => expect(names()).toEqual(['docs', 'a.txt']));
+      expect([...target.querySelectorAll('.file-explorer-crumb')].map((c) => c.textContent)).toEqual(['コンピューター', 'home', 'me']);
+      await vi.waitFor(() => expect(selectedInMain()).toEqual(['a.txt']));
+      expect(document.activeElement).toBe(row('a.txt').querySelector('.file-explorer-row'));
+      expect(row('a.txt').classList.contains('file-explorer-item-cursor')).toBe(true);
+      // 親も一つ上がる。フォルダを押しても、中へは入らず、一覧にそのフォルダを見せる
+      await vi.waitFor(() => expect(parentRows()).toEqual(['me']));
+      prow('me').click();
+      await settle();
+      expect([...target.querySelectorAll('.file-explorer-crumb')].map((c) => c.textContent)).toEqual(['コンピューター', 'home']);
+      await vi.waitFor(() => expect(selectedInMain()).toEqual(['me']));
+      expect(document.activeElement).toBe(row('me').querySelector('.file-explorer-row'));
+      await vi.waitFor(() => expect(parentRows()).toEqual(['home']));
+    });
+
+    it('プレビュー: カーソルが無ければ何も出さない。フォルダは直下、テキストは先頭を色付きで、SVG は市松模様の上に', async () => {
+      fake.tree.set('/home/me/logo.svg', 'file');
+      fake.tree.set('/home/me/main.js', 'file');
+      settings.views = { hidden: ['parents'], swipe: 'places' };
+      const fetched: string[] = [];
+      vi.stubGlobal('fetch', async (url: string) => {
+        fetched.push(url);
+        return new Response('const a = 1;\nconsole.log(a);\n');
+      });
+      try {
+        app = mount(App, { target });
+        await settle();
+        const pane = (): HTMLElement => target.querySelector('.side-pane[aria-label="プレビュー"]')!;
+        expect(pane()).not.toBeNull();
+        expect(pane().querySelector('.preview-head')).toBeNull(); // 開いた直後はカーソルが無い
+        await arrow('ArrowDown');
+        expect(pane().querySelector('.preview-title')?.textContent).toBe('docs');
+        await vi.waitFor(() => expect([...pane().querySelectorAll('.preview-name')].map((n) => n.textContent)).toEqual(['in.txt']));
+        // 並びはフォルダが先、名前順: docs・a.txt・logo.svg・main.js
+        expect(names()).toEqual(['docs', 'a.txt', 'logo.svg', 'main.js']);
+        await arrow('ArrowDown');
+        await arrow('ArrowDown');
+        expect(pane().querySelector('.preview-title')?.textContent).toBe('logo.svg');
+        expect(pane().querySelector('img.preview-svg')).not.toBeNull();
+        await arrow('ArrowDown');
+        expect(pane().querySelector('.preview-title')?.textContent).toBe('main.js');
+        await vi.waitFor(() => expect(pane().querySelector('.preview-code .hljs-keyword')?.textContent).toBe('const'));
+        expect(fetched.some((u) => u.includes('main.js'))).toBe(true);
+        expect(fetched.some((u) => u.includes('logo.svg'))).toBe(false); // 画像は、文字としては読まない
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
   });
 
   it('隠しファイルの切り替えは、読み直して反映し、次に開いたときも覚えている', async () => {

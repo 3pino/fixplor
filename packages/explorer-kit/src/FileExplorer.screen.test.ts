@@ -663,6 +663,51 @@ describe('表示方法と並び順', () => {
     expect(css).toMatch(/\.file-explorer-name-ext\s*\{[^}]*flex:\s*none/);
   });
 
+  it('上端の行の「並び替え」ボタン: ≡ の中と同じ並び替えのメニューを開く。選ぶと並びが変わり、メニューは閉じる。≡ の並び替えも残る', async () => {
+    const el = await render();
+    const btn = el.querySelector<HTMLButtonElement>('.file-explorer-bar button[aria-label="並び替え"]')!;
+    expect(btn).not.toBeNull();
+    btn.click();
+    flushSync();
+    const items = (): string[] => [...document.querySelectorAll('.file-explorer-popup-menu .menu-item')].map((b) => b.textContent?.trim() ?? '');
+    expect(items()).toEqual(['名前', '種類', '更新日時', 'サイズ', '昇順', '降順']);
+    [...document.querySelectorAll<HTMLElement>('.file-explorer-popup-menu .menu-item')].find((b) => b.textContent?.trim() === 'サイズ')!.click();
+    flushSync();
+    expect(explorerView.of('').sortKey).toBe('size');
+    expect(document.querySelector('.file-explorer-popup-menu')).toBeNull();
+    // ≡ の中にも、並び替えがある
+    el.querySelector<HTMLButtonElement>('button[aria-label="メニュー"]')!.click();
+    flushSync();
+    expect(document.querySelector('.file-explorer-popup-menu')?.textContent).toContain('並び替え');
+  });
+
+  it('上端の行は必ず 1 行: 次の行へ回った部品（右のもの）だけを隠す。幅が戻れば、すぐに出す', async () => {
+    // jsdom にはレイアウトが無いので、「削除・検索・並び替え」だけが 2 行目に回ったことにする
+    const wrapped = new Set(['削除', '検索', '並び替え']);
+    let narrow = true;
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const second = narrow && wrapped.has(this.getAttribute('aria-label') ?? '') || (narrow && this.querySelector(':scope > button[aria-label="並び替え"]') !== null);
+      return { top: second ? 40 : 0, bottom: 0, left: 0, right: 0, width: 10, height: 10, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(() => [{}] as unknown as DOMRectList);
+    try {
+      const el = await render();
+      await vi.waitFor(() => expect(el.querySelector('.file-explorer-bar button[aria-label="検索"]')?.hasAttribute('data-clipped')).toBe(true));
+      expect(el.querySelector('.file-explorer-bar button[aria-label="削除"]')?.hasAttribute('data-clipped')).toBe(true);
+      expect(el.querySelector('.file-explorer-bar button[aria-label="コピー"]')?.hasAttribute('data-clipped')).toBe(false);
+      expect(el.querySelector('.file-explorer-bar .file-explorer-path')?.hasAttribute('data-clipped')).toBe(false);
+      // ≡（右端の操作）は、いつも出ている
+      expect(el.querySelector('button[aria-label="メニュー"]')?.closest('[data-clipped]')).toBeNull();
+      // 幅が戻る（何も回らない）と、全部出す。部品が増える（子の変化）で測り直す
+      narrow = false;
+      el.querySelector('.file-explorer-bar .panel-bar-main')!.append(document.createElement('span'));
+      await vi.waitFor(() => expect(el.querySelector('.file-explorer-bar [data-clipped]')).toBeNull());
+    } finally {
+      rect.mockRestore();
+      rects.mockRestore();
+    }
+  });
+
   it('詳細の見出しを押すと、その列で並べ替える（もう一度押すと向きが入れ替わる）。今の並びの列に、向きの矢印が付く', async () => {
     const el = await render();
     const head = (label: string): HTMLElement => [...el.querySelectorAll<HTMLElement>('.file-explorer-col-sort')].find((b) => b.textContent?.trim() === label)!;
@@ -2541,7 +2586,7 @@ describe('PC の操作（右クリックのメニュー・名前を押して書�
       e.name === 'a.txt' ? { icon: { src: '/icon.svg' }, color: 'rgb(1, 2, 3)', opacity: 0.5 } : e.name === 'docs' ? { color: 'red' } : null;
     const el = await renderWith({ entryStyle });
     const a = rowOf(el, 'a.txt');
-    expect(a.querySelector('.file-explorer-icon img.file-explorer-glyph-img')!.getAttribute('src')).toBe('/icon.svg');
+    expect(a.querySelector('.file-explorer-icon img.entry-glyph-img')!.getAttribute('src')).toBe('/icon.svg');
     expect(a.style.getPropertyValue('--entry-color')).toBe('rgb(1, 2, 3)');
     expect(a.style.opacity).toBe('0.5');
     expect(rowOf(el, 'docs').style.getPropertyValue('--entry-color')).toBe('red');
@@ -2551,7 +2596,7 @@ describe('PC の操作（右クリックのメニュー・名前を押して書�
     expect(pic.style.opacity).toBe('');
     explorerView.setView('', 'grid');
     flushSync();
-    expect(rowOf(el, 'a.txt').querySelector('.file-explorer-thumb img.file-explorer-glyph-img')).not.toBeNull();
+    expect(rowOf(el, 'a.txt').querySelector('.file-explorer-thumb img.entry-glyph-img')).not.toBeNull();
   });
 
   it('entryStyle: アイコンは、共通の登録簿の名前（{ iconName }）でも渡せる。登録した独自アイコンは、その形で描く', async () => {

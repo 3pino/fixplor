@@ -39,6 +39,9 @@
   import { placeLabel } from './lib/labels';
   import { entryStyleOf } from './lib/ruleStyle';
   import { viewShown } from './lib/views';
+  import SidePane from './components/SidePane.svelte';
+  import ParentView from '@3pino/explorer-kit/ParentView.svelte';
+  import PreviewPane from '@3pino/explorer-kit/PreviewPane.svelte';
   import { allFilesGranted, openAllFilesSettings } from './lib/allFiles';
   import { startBackNav, type BackNav } from '@3pino/app-kit-web/core/backNav';
   import { places as saved, type DavPlace } from './lib/places.svelte';
@@ -143,6 +146,8 @@
   const pins = createPins();
 
   const explorer = $derived(current?.explorer ?? null);
+  /** 一覧のカーソルのある項目（プレビューのビューが見せる） */
+  let cursorEntry = $state<Entry | null>(null);
   /** 見ているのが、設定のタブか（そのあいだ、一覧は裏に回る） */
   const activeSettings = $derived(tabs.find((t) => t.id === activeId)?.settings === true);
   const hasSettingsTab = $derived(tabs.some((t) => t.settings === true));
@@ -898,6 +903,8 @@
   const NARROW_QUERY = '(max-width: 767px)';
   /** Android か（場所の欄の引き出しは、Android だけ） */
   const android = isAndroid();
+  /** 一覧の横のビュー（親フォルダ・プレビュー）を出せる画面か（デスクトップで、設定でない。Android は出さない） */
+  const sideViews = $derived(!android && !activeSettings && explorer !== null);
   /** デスクトップの自前のタイトルバー（タブの欄が兼ねる） */
   const windowControls = hasWindowControls();
   let swipe: { x: number; y: number; target: EventTarget | null; dir: 'h' | 'v' | null } | null = null;
@@ -1004,6 +1011,12 @@
         onkeydown={resizeKey}
       ></div>
       {/if}
+      <!-- 親フォルダのビュー（デスクトップだけ。場所の欄と一覧のあいだ） -->
+      {#if sideViews && explorer && viewShown(settings.views, 'parents')}
+        <SidePane label="親フォルダ" storageKey="fixplor.parentsWidth" side="left" min={140} max={480} initial={200}>
+          {#key explorer}<ParentView {explorer} entryStyle={(e) => entryStyleOf(e, settings.rules)} />{/key}
+        </SidePane>
+      {/if}
       <main class="main">
         <!-- 設定のタブがあるあいだは、他のタブを見ていても作ったままにする（戻ったとき、ホットキーの画面・開いた節・検索の文字が続きから見える） -->
         {#if hasSettingsTab}
@@ -1036,7 +1049,7 @@
           </p>
         {/if}
         {#key current}
-          <FileExplorer {explorer} keymap={hotkeys.keymap} columnWidths={settings.columns} oncolumnwidths={(w) => (settings.columns = w)} menuLayout={settings.menus} entryStyle={(e) => entryStyleOf(e, settings.rules)}>
+          <FileExplorer {explorer} keymap={hotkeys.keymap} columnWidths={settings.columns} oncolumnwidths={(w) => (settings.columns = w)} menuLayout={settings.menus} entryStyle={(e) => entryStyleOf(e, settings.rules)} oncursor={(e) => (cursorEntry = e)}>
             {#snippet headerItem(id)}
               {#if id === 'back'}
                 <IconButton label="戻る" title="戻る" disabled={!host.canBack} onclick={() => host.back()}><ArrowLeft size={16} /></IconButton>
@@ -1065,6 +1078,12 @@
         {/key}
         {/if}
       </main>
+      <!-- プレビューのビュー（デスクトップだけ。一覧の右）。カーソルのある項目の中身 -->
+      {#if sideViews && explorer && viewShown(settings.views, 'preview')}
+        <SidePane label="プレビュー" storageKey="fixplor.previewWidth" side="right" min={200} max={900} initial={320}>
+          {#key explorer}<PreviewPane {explorer} entry={cursorEntry} entryStyle={(e) => entryStyleOf(e, settings.rules)} />{/key}
+        </SidePane>
+      {/if}
     </div>
   {/if}
 </div>
