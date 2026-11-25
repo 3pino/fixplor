@@ -20,9 +20,8 @@ describe('依存の一覧', () => {
     expect(bulkInstallCommand([a, b], 'linux')).toBe('sudo apt install a');
     expect(bulkInstallCommand([b], 'linux')).toBeNull();
     expect(bulkInstallCommand([], 'windows')).toBeNull();
-    expect(bulkInstallCommand([a, a], 'macos')).toBeNull();
   });
   it('デスクトップの OS だけ受ける', () => {
-    expect([desktopOs('windows'), desktopOs('linux'), desktopOs('macos'), desktopOs('android'), desktopOs('')]).toEqual(['windows', 'linux', 'macos', null, null]);
+    expect([desktopOs('windows'), desktopOs('linux'), desktopOs('android'), desktopOs('')]).toEqual(['windows', 'linux', null, null]);
   });
 });

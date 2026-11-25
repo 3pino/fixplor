@@ -29,7 +29,7 @@ afterEach(() => {
   app = undefined;
 });
 
-const show = async (os: 'windows' | 'linux' | 'macos'): Promise<void> => {
+const show = async (os: 'windows' | 'linux'): Promise<void> => {
   app = mount(DependencySettings, { target: document.body, props: { os } });
   await settle();
 };
@@ -70,7 +70,7 @@ describe('設定の「依存」', () => {
 
   it('確かめられなかったときは、そう出す（入っていない扱いにはしない）', async () => {
     dep.check.mockRejectedValue(new Error('x'));
-    await show('macos');
+    await show('windows');
     expect(row('fd').textContent).toContain('確認できませんでした');
     expect(document.querySelector('.dep-bulk-command')).toBeNull();
   });

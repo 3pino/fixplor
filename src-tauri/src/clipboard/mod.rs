@@ -4,7 +4,7 @@
 //!  - Windows: `CF_HDROP`（ファイルの一覧）と `Preferred DropEffect`（コピー = 1・移動 = 2）。
 //!  - Linux: `text/uri-list`・`x-special/gnome-copied-files`（GNOME・Thunar など。先頭の行が copy / cut）・`application/x-kde-cutselection`（KDE）。
 //!    GTK のクリップボードを使う（X11 でも Wayland でも同じ。GTK の操作はメインのスレッドで行う）。
-//!  - それ以外（Android・macOS）: 何もしない（`unsupported`）。アプリの中の切り取り・コピーのバッファだけで貼り付ける。
+//!  - それ以外（Android）: 何もしない（`unsupported`）。アプリの中の切り取り・コピーのバッファだけで貼り付ける。
 //!
 //! ほかに、書いたときの「印」（画面が作った文字）を、独自の形式で一緒に書く。貼り付けのとき、クリップボードにまだこの印があれば
 //! （ほかのアプリでコピーし直していなければ）、アプリの中のバッファを貼る。印だけを読むので、ファイルの一覧は読まない。

@@ -1,7 +1,7 @@
 // 依存（入れておくと便利な、外部のコマンド）。設定の「依存」に、入っているかのチェックリストと、入れ方を出す。
 // 増えるときは、DEPENDENCIES に 1 つ足すだけ（画面・一括のコマンドは、この一覧から作る）。
 
-export type OsName = 'windows' | 'macos' | 'linux';
+export type OsName = 'windows' | 'linux';
 
 export type Dependency = {
   id: string;
@@ -25,7 +25,7 @@ export const DEPENDENCIES: readonly Dependency[] = [
     name: 'fd',
     description: 'サブフォルダを探す検索を、速くします（無くても検索できます）。',
     commands: ['fd', 'fdfind'],
-    install: { windows: 'winget install sharkdp.fd', macos: 'brew install fd', linux: 'sudo apt install fd-find' },
+    install: { windows: 'winget install sharkdp.fd', linux: 'sudo apt install fd-find' },
     note: { linux: 'Debian・Ubuntu の例です。コマンド名は fdfind になります（どちらでも見つけます）。' },
     github: 'https://github.com/sharkdp/fd',
   },
@@ -48,9 +48,9 @@ export function bulkInstallCommand(deps: readonly Dependency[], os: OsName): str
   return cmds.length === 0 ? null : cmds.join(os === 'windows' ? '; ' : ' && ');
 }
 
-/** OS の名前から、このアプリが知っている 3 つのどれか（デスクトップ以外は null） */
+/** OS の名前から、このアプリが知っている 2 つのどちらか（デスクトップ以外は null） */
 export function desktopOs(name: string): OsName | null {
-  return name === 'windows' || name === 'macos' || name === 'linux' ? name : null;
+  return name === 'windows' || name === 'linux' ? name : null;
 }
 
 /** 入っているかを、Rust で確かめる */

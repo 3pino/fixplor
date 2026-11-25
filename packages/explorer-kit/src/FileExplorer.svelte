@@ -872,14 +872,25 @@
   // コピー・切り取りは、項目を OS のクリップボードにもファイルとして書く（置き場所ができるとき。文字は書かない）。
   // 貼り付けは、クリップボードにこちらが書いた印がまだあればバッファを、
   // ほかでコピーし直していれば（ファイル・画像・文字）そちらを、開いているフォルダへ送る（文字は .txt のファイルにする）。
-  // OS に書けないとき（Android など）は、クリップボードを見ずにバッファを貼る
+  // OS にファイルとして書けないとき（WebDAV・Android など）は、コピーした時点のクリップボードの中身を控えておき（文字は書かない）、
+  // 貼るときに今の中身と比べる。同じならバッファ、違えばクリップボード
 
-  /** バッファが、貼るときの元になるか（OS に書いていないなら常に。書いたなら、まだ自分の印がクリップボードにあるときだけ） */
+  /** クリップボードの今の中身の見分け（文字はその文字、画像は種類と大きさ、空は ''）。同じ見分けなら、同じ中身とみなす */
+  async function clipSignature(): Promise<string> {
+    const text = await host.clipboard.readText();
+    if (text) return `t:${text}`;
+    const img = await host.clipboard.readImage();
+    return img ? `i:${img.type}:${img.size}` : '';
+  }
+
+  /** バッファが、貼るときの元になるか（OS と結び付いていないなら常に。結び付いているなら、クリップボードがコピーしたときのままのときだけ） */
   async function bufferIsPasteSource(): Promise<boolean> {
     if (explorerBuffer.empty) return false;
     const mine = explorerBuffer.clipToken;
-    if (mine === null) return true;
-    return (await host.clipboard.files?.token()) === mine;
+    if (mine !== null) return (await host.clipboard.files?.token()) === mine;
+    const snap = explorerBuffer.clipSnapshot;
+    if (snap !== null) return (await clipSignature()) === snap;
+    return true;
   }
 
   /** クリップボードに何があるか（貼り付けを押せるか）。開いたとき・前面に戻ったとき・コピーしたとき・メニューを開いたときに確かめ直す */
@@ -1029,21 +1040,35 @@
     };
   });
 
-  /** バッファの項目を、OS のクリップボードにファイルとしても書く（置き場所ができるときだけ。文字は書かない）。書いたら、印をバッファに持つ */
+  /**
+   * バッファを、OS のクリップボードと結び付ける。置き場所ができるときは、項目をファイルとして書いて印を持つ（文字は書かない）。
+   * 書けないとき（WebDAV・Android など、書いて失敗したときも）は、コピーした時点のクリップボードの中身を控える。
+   * クリック・タップの処理の中から呼ぶ（でないと、クリップボードを読めないことがある）
+   */
   function syncToClipboard(): void {
     const files = host.clipboard.files;
     const mode = explorerBuffer.mode;
-    if (!files || mode === null) {
-      void refreshClip();
+    const paths = explorerBuffer.items.map((i) => i.path);
+    // 書いている間にバッファを入れ替えていないか
+    const same = (): boolean => explorerBuffer.mode === mode && explorerBuffer.items.map((i) => i.path).join('\n') === paths.join('\n');
+    const snapshot = (): Promise<void> =>
+      clipSignature().then((sig) => {
+        if (same()) explorerBuffer.clipSnapshot = sig;
+      });
+    const done = (): void => void refreshClip();
+    if (mode === null) return done();
+    if (!files) {
+      void snapshot().finally(done);
       return;
     }
-    const paths = explorerBuffer.items.map((i) => i.path);
     const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    void files.write(paths, mode, token).then((ok) => {
-      // 書いている間にバッファを入れ替えていなければ、クリップボードと結び付ける
-      if (ok && explorerBuffer.items.map((i) => i.path).join('\n') === paths.join('\n') && explorerBuffer.mode === mode) explorerBuffer.clipToken = token;
-      void refreshClip();
-    });
+    void files
+      .write(paths, mode, token)
+      .then(async (ok) => {
+        if (!ok) await snapshot();
+        else if (same()) explorerBuffer.clipToken = token;
+      })
+      .finally(done);
   }
 
   /** 貼り付け（バーのボタン・空きスペースのメニュー）。OS のクリップボードを読んで、何を貼るか決める */
@@ -1054,11 +1079,11 @@
   }
 
   /**
-   * クリップボードの中身（files・text・画像）から貼る。こちらがファイルとして書いた印がまだあれば（コピーしたまま）、ファイルの一覧を読まずにバッファ。
+   * クリップボードの中身（files・text・画像）から貼る。ファイルとして書いた印がまだあれば、またはコピーしたときの中身のままなら（コピーしたまま）、バッファ。
    * そうでないとき、OS のファイルがあればそれ。無ければ画像、文字（.txt）の順。どれも無ければバッファ
    */
   async function pasteWith(dir: string, text: string | null, files: File[], image: () => Promise<File | null>): Promise<void> {
-    if (explorerBuffer.clipToken !== null && (await bufferIsPasteSource())) return paste(dir);
+    if (explorerBuffer.tracked && (await bufferIsPasteSource())) return paste(dir);
     if (files.length > 0) {
       const batch = await beginBatch(dir);
       if (!batch) return;
@@ -1066,7 +1091,7 @@
       if (sent.length === 1) renameAfterPaste(dir, sent[0]);
       return;
     }
-    if (!explorerBuffer.empty && explorerBuffer.clipToken === null) return paste(dir);
+    if (!explorerBuffer.empty && !explorerBuffer.tracked) return paste(dir);
     const img = await image();
     if (img) return renameAfterPaste(dir, await sendOne(dir, img));
     if (text) return renameAfterPaste(dir, await sendOne(dir, new File([text], host.clipboard.textName(), { type: 'text/plain' })));
@@ -1689,7 +1714,7 @@
         renameTimer = setTimeout(() => startRename(e), DOUBLE_CLICK_MS);
         return;
       }
-      // PC: Ctrl（Mac は Cmd）・Shift を押しながらなら、選びに足す・外す。押さないなら、その項目だけを選ぶ（選んでいる唯一の項目を押したときは、外す）
+      // PC: Ctrl・Shift を押しながらなら、選びに足す・外す。押さないなら、その項目だけを選ぶ（選んでいる唯一の項目を押したときは、外す）
       const only = explorerSelection.count === 1 && explorerSelection.has(e.path);
       if (explorerSelection.desktop && !(ev.ctrlKey || ev.metaKey || ev.shiftKey) && !only) explorerSelection.replace([e.path]);
       else explorerSelection.toggle(e.path);

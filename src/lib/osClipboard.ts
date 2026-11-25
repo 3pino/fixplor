@@ -4,7 +4,7 @@ import { tauriCall, type Call } from './fs/call';
 /** OS のクリップボードへ、ファイルとして書く口（エクスプローラー・ファイルマネージャーに貼り付けられる） */
 export type FileClipboard = NonNullable<ExplorerHost['clipboard']['files']>;
 
-/** この端末のファイルを、OS のクリップボードへ書ける OS（Rust の clipboard/ がある）。Android・macOS は、アプリの中のバッファだけ */
+/** この端末のファイルを、OS のクリップボードへ書ける OS（Rust の clipboard/ がある）。Android は、アプリの中のバッファだけ */
 export function canWriteFiles(os: string): boolean {
   return os === 'windows' || os === 'linux';
 }

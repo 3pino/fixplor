@@ -82,7 +82,7 @@ describe('この端末の置き場所（POSIX）', () => {
     expect(calls[1]).toEqual(['fs_trash', { path: '/a/x' }]);
     expect((await fs.api.restore(t.id)).path).toBe('a/x');
     expect(calls.find((c) => c[0] === 'fs_os_trash_restore')?.[1]).toEqual({ id: '/home/me/.local/share/Trash/info/x.trashinfo' });
-    // 印を見つけられなかった（macOS など）ときは、id が空で、戻せない
+    // 印を見つけられなかったときは、id が空で、戻せない
     const none = fake({ fs_trash: null });
     const fs2 = await createLocalFs({ call: none.call });
     expect((await fs2.api.trash('a/y')).id).toBe('');

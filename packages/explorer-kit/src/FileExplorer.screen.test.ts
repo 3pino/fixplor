@@ -1044,18 +1044,24 @@ describe('OS のクリップボードとの同期', () => {
     expect(h.upload).not.toHaveBeenCalled();
   });
 
-  it('置き場所がファイルを持たない（Android・WebDAV）ときは、クリップボードに何も書かず（文字も）、バッファだけで貼る', async () => {
+  /** ファイルを持たない置き場所でコピーし、クリップボードの中身を控えたところまで進める */
+  async function copyWithoutFiles(el: HTMLElement): Promise<void> {
     h.clip.supportsFiles = false;
-    h.clip.text = 'old';
-    const el = await render();
     explorerSelection.start('a.txt');
     flushSync();
     el.querySelector<HTMLButtonElement>('button[aria-label="コピー"]')!.click();
     flushSync();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(explorerBuffer.clipSnapshot).not.toBeNull());
+  }
+
+  it('置き場所がファイルを持たない（Android・WebDAV）ときは、クリップボードに何も書かず（文字も）、コピーした時点の中身を控えて、変わっていなければバッファを貼る', async () => {
+    h.clip.text = 'old';
+    const el = await render();
+    await copyWithoutFiles(el);
     expect(h.clip.text).toBe('old');
     expect(h.clip.files).toBeNull();
     expect(explorerBuffer.clipToken).toBeNull();
+    expect(explorerBuffer.clipSnapshot).toBe('t:old');
     fileExplorer.open('docs');
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-list')).not.toBeNull());
     pasteClick(el);
@@ -1063,6 +1069,35 @@ describe('OS のクリップボードとの同期', () => {
     ui.confirmReq!.resolve(true);
     await vi.waitFor(() => expect(h.copy).toHaveBeenCalledWith('a.txt', 'docs/a.txt', true));
     expect(h.upload).not.toHaveBeenCalled();
+  });
+
+  it('ファイルを持たない置き場所で、コピーのあとほかで文字をコピーし直していれば、その文字を貼る（バッファは貼らない）', async () => {
+    h.clip.text = 'old';
+    const el = await render();
+    await copyWithoutFiles(el);
+    h.clip.text = 'other';
+    pasteClick(el);
+    await vi.waitFor(() => expect(h.upload).toHaveBeenCalledWith(expect.stringMatching(/\.txt$/), expect.any(File), expect.any(Function)));
+    expect(h.copy).not.toHaveBeenCalled();
+  });
+
+  it('ファイルを持たない置き場所で、コピーしたときクリップボードが空で、あとから文字が入ったときも、その文字を貼る', async () => {
+    const el = await render();
+    await copyWithoutFiles(el);
+    expect(explorerBuffer.clipSnapshot).toBe('');
+    h.clip.text = 'later';
+    pasteClick(el);
+    await vi.waitFor(() => expect(h.upload).toHaveBeenCalled());
+    expect(h.copy).not.toHaveBeenCalled();
+  });
+
+  it('ファイルを持たない置き場所で、コピーのあとほかで画像をコピーしていれば、画像を送る', async () => {
+    const el = await render();
+    await copyWithoutFiles(el);
+    h.clip.image = new File(['x'], 'clipboard-1.png', { type: 'image/png' });
+    pasteClick(el);
+    await vi.waitFor(() => expect(h.upload).toHaveBeenCalledWith('clipboard-1.png', expect.any(File), expect.any(Function)));
+    expect(h.copy).not.toHaveBeenCalled();
   });
 
   it('Ctrl+V（入力欄の外）で、OS のファイルを送る。入力欄の中の貼り付けは邪魔しない', async () => {
@@ -1434,7 +1469,7 @@ describe('PC の選択（0 件でも続く。ダブルクリック・Enter で�
     expect(count(el)).toBe('1 件選択中');
   });
 
-  it('選んでいるときに別の項目を押すと、それだけを選ぶ。Ctrl（Cmd）・Shift を押しながらなら、足す・外す', async () => {
+  it('選んでいるときに別の項目を押すと、それだけを選ぶ。Ctrl・Shift を押しながらなら、足す・外す', async () => {
     const el = await render();
     clickRow(el, 'a.txt');
     clickRow(el, 'docs');

@@ -117,7 +117,7 @@ export function createHost(state: HostState, fs: OpenSource): ExplorerHost {
       readImage: async () => null,
       readNativeImage: async () => null,
       textName: () => `貼り付け ${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`,
-      // コピー・切り取りは、この端末のファイルならファイルとして OS に渡す（Windows・Linux）。文字は書かない。WebDAV・Android・macOS は、アプリの中のバッファだけ
+      // コピー・切り取りは、この端末のファイルならファイルとして OS に渡す（Windows・Linux）。文字は書かない。WebDAV・Android は、アプリの中のバッファだけ（コピーした時点のクリップボードの中身を控えて、貼るときに比べる）
       files: fs.osPath && canWriteFiles(osName()) ? fileClipboard(fs.osPath) : undefined,
     },
     download: {

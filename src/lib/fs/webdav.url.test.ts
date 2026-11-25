@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { davProxyUrl, PROXY_SCHEME } from './webdav';
 
-/** Tauri の convertFileSrc の中身（Linux・macOS: scheme://localhost/<符号化>、Windows・Android: http://scheme.localhost/<符号化>） */
+/** Tauri の convertFileSrc の中身（Linux: scheme://localhost/<符号化>、Windows・Android: http://scheme.localhost/<符号化>） */
 function stubTauri(os: 'linux' | 'windows'): void {
   (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
     convertFileSrc: (path: string, protocol: string) => {

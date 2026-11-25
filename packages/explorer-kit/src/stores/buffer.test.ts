@@ -35,4 +35,17 @@ describe('アプリ内の切り取り・コピーのバッファ', () => {
     explorerBuffer.clear();
     expect(explorerBuffer.clipToken).toBeNull();
   });
+
+  it('コピーした時点のクリップボードの控え（clipSnapshot）も、入れ替える・空にすると忘れる。空文字の控えも「結び付いている」', () => {
+    expect(explorerBuffer.tracked).toBe(false);
+    explorerBuffer.set('copy', [{ path: 'a/x.txt', kind: 'file' }]);
+    explorerBuffer.clipSnapshot = '';
+    expect(explorerBuffer.tracked).toBe(true);
+    explorerBuffer.set('move', [{ path: 'a/y.txt', kind: 'file' }]);
+    expect(explorerBuffer.clipSnapshot).toBeNull();
+    explorerBuffer.clipSnapshot = 't:x';
+    explorerBuffer.clear();
+    expect(explorerBuffer.clipSnapshot).toBeNull();
+    expect(explorerBuffer.tracked).toBe(false);
+  });
 });

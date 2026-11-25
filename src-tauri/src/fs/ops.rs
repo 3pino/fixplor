@@ -44,7 +44,7 @@ pub fn copy(from: &Path, to: &Path, overwrite: bool) -> FsResult<Entry> {
     entry_of(to)
 }
 
-/// ゴミ箱へ入れる（OS のゴミ箱）。戻すときの印（OS のゴミ箱の項目の id）を返す。見つけられないとき・戻せない OS（macOS）は None
+/// ゴミ箱へ入れる（OS のゴミ箱）。戻すときの印（OS のゴミ箱の項目の id）を返す。見つけられないとき・戻せない OS は None
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn trash(path: &Path) -> FsResult<Option<String>> {
     fs::symlink_metadata(path).map_err(|e| FsError::io(&e, path))?;
@@ -53,7 +53,7 @@ pub fn trash(path: &Path) -> FsResult<Option<String>> {
 }
 
 /// 入れたばかりの項目の id（元のパスが同じで、いちばん新しいもの）。一覧が読めないときは None
-#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn os_trash_id(path: &Path) -> Option<String> {
     // trash の original_path は、親を正規化したパス
     let want = path.parent()?.canonicalize().ok()?.join(path.file_name()?);
@@ -65,13 +65,13 @@ fn os_trash_id(path: &Path) -> Option<String> {
         .map(|i| i.id.to_string_lossy().into_owned())
 }
 
-#[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 fn os_trash_id(_path: &Path) -> Option<String> {
     None
 }
 
 /// OS のゴミ箱から、元の場所へ戻す。戻したパスを返す。元の場所に同じ名前があれば、戻さない（`exists`）
-#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn os_trash_restore(id: &str) -> FsResult<String> {
     let item = trash::os_limited::list()
         .map_err(|e| FsError::new("io", format!("ゴミ箱を読めませんでした: {e}")))?
@@ -86,7 +86,7 @@ pub fn os_trash_restore(id: &str) -> FsResult<String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-#[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 pub fn os_trash_restore(_id: &str) -> FsResult<String> {
     Err(FsError::new("unsupported", "この OS のゴミ箱からは、アプリからは戻せません"))
 }

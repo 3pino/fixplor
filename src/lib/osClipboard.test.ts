@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { canWriteFiles, fileClipboard } from './osClipboard';
 
 describe('OS のクリップボードへファイルとして書く口', () => {
-  it('書ける OS は Windows と Linux だけ（Android・macOS は、アプリの中のバッファだけ）', () => {
-    expect(['windows', 'linux', 'android', 'macos', ''].map(canWriteFiles)).toEqual([true, true, false, false, false]);
+  it('書ける OS は Windows と Linux だけ（Android は、アプリの中のバッファだけ）', () => {
+    expect(['windows', 'linux', 'android', ''].map(canWriteFiles)).toEqual([true, true, false, false]);
   });
 
   it('画面のパスを OS のパスにして Rust へ渡す。書けたら true', async () => {
