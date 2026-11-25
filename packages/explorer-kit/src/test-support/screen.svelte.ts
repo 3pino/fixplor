@@ -35,8 +35,11 @@ export const h = {
   restore: vi.fn(async (_id: string) => ({ name: '', path: '', kind: 'file' as const, size: 1, modified: 0, mime: null }) as Entry),
   purge: vi.fn(async (_id: string) => {}),
   move: vi.fn(async (_from: string, _to: string, _overwrite?: boolean) => ({}) as Entry),
-  /** OS のクリップボード（差し替え）。copyText で書いたものが text に入る */
-  clip: { text: null as string | null, image: null as File | null, writable: true },
+  /**
+   * OS のクリップボード（差し替え）。copyText で書いたものが text に、files.write で書いたものが files に入る。
+   * supportsFiles が偽なら、置き場所は files を持たない（Android・WebDAV など。アプリの中のバッファだけ）
+   */
+  clip: { text: null as string | null, image: null as File | null, files: null as { paths: string[]; op: 'copy' | 'move'; token: string } | null, writable: true, supportsFiles: true },
 };
 
 /** この端末の種類。true のときだけ、選択の操作が 0 件でも続く（PC 向けの動き。試験ごとに戻す） */
@@ -214,6 +217,20 @@ const host: ExplorerHost = {
     readImage: async () => h.clip.image,
     readNativeImage: async () => null,
     textName: () => 'clipboard-20260101-000000.txt',
+    get files() {
+      if (!h.clip.supportsFiles) return undefined;
+      return {
+        write: async (paths: string[], op: 'copy' | 'move', token: string) => {
+          if (!h.clip.writable) return false;
+          // 前の中身（文字・画像）は消える。文字は書かない
+          h.clip.files = { paths, op, token };
+          h.clip.text = null;
+          h.clip.image = null;
+          return true;
+        },
+        token: async () => h.clip.files?.token ?? null,
+      };
+    },
   },
   download: { file: downloadFile, intercept: vi.fn(() => false) },
   osDrop: {

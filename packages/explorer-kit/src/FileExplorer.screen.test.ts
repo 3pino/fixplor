@@ -50,7 +50,7 @@ afterEach(async () => {
   h.purge.mockClear();
   h.restore.mockClear();
   h.move.mockClear();
-  h.clip = { text: null, image: null, writable: true };
+  h.clip = { text: null, image: null, files: null, writable: true, supportsFiles: true };
   explorerSelection.clear();
   explorerView.reset();
 });
@@ -962,14 +962,17 @@ describe('OS のクリップボードとの同期', () => {
     flushSync();
     el.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click();
     flushSync();
-    await vi.waitFor(() => expect(explorerBuffer.clipText).not.toBeNull());
+    await vi.waitFor(() => expect(explorerBuffer.clipToken).not.toBeNull());
   }
 
-  it('コピーすると、項目のパスを OS のクリップボードにも書く。そのまま貼ればアプリ内のコピー', async () => {
+  it('コピーすると、項目を OS のクリップボードにファイルとして書く（文字は書かない）。そのまま貼ればアプリ内のコピー', async () => {
     fileExplorer.dir = '';
+    h.clip.text = 'old';
     const el = await render();
     await selectAndPress(el, 'a.txt', 'コピー');
-    expect(h.clip.text).toBe('a.txt');
+    expect(h.clip.files).toMatchObject({ paths: ['a.txt'], op: 'copy' });
+    expect(h.clip.files?.token).toBe(explorerBuffer.clipToken);
+    expect(h.clip.text).toBeNull();
     // 別のフォルダへ貼る
     fileExplorer.open('docs');
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-list')).not.toBeNull());
@@ -981,9 +984,16 @@ describe('OS のクリップボードとの同期', () => {
     expect(h.upload).not.toHaveBeenCalled();
   });
 
-  it('コピーのあとに、ほかで文字をコピーし直していれば、その文字を貼る（バッファは貼らない）', async () => {
+  it('切り取りは、「移動」として OS に伝える', async () => {
+    const el = await render();
+    await selectAndPress(el, 'a.txt', '切り取り');
+    expect(h.clip.files).toMatchObject({ paths: ['a.txt'], op: 'move' });
+  });
+
+  it('コピーのあとに、ほかで文字をコピーし直していれば（印が無くなる）、その文字を貼る（バッファは貼らない）', async () => {
     const el = await render();
     await selectAndPress(el, 'a.txt', 'コピー');
+    h.clip.files = null;
     h.clip.text = 'other';
     pasteClick(el);
     await vi.waitFor(() => expect(h.upload).toHaveBeenCalled());
@@ -993,11 +1003,26 @@ describe('OS のクリップボードとの同期', () => {
   it('ほかで画像をコピーし直していれば、画像を送る', async () => {
     const el = await render();
     await selectAndPress(el, 'a.txt', 'コピー');
-    h.clip.text = null;
+    h.clip.files = null;
     h.clip.image = new File(['x'], 'clipboard-1.png', { type: 'image/png' });
     pasteClick(el);
     await vi.waitFor(() => expect(h.upload).toHaveBeenCalledWith('clipboard-1.png', expect.any(File), expect.any(Function)));
     expect(h.copy).not.toHaveBeenCalled();
+  });
+
+  it('コピーのあと、こちらが書いたファイルがクリップボードにあるあいだは、Ctrl+V で OS のファイル（自分が書いたもの）が届いても、送らずバッファを貼る（切り取りを移動にするため）', async () => {
+    const el = await render();
+    await selectAndPress(el, 'a.txt', '切り取り');
+    fileExplorer.open('docs');
+    await vi.waitFor(() => expect(el.querySelector('.file-explorer-list')).not.toBeNull());
+    const ev = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(ev, 'clipboardData', { value: { files: [new File(['x'], 'a.txt')], getData: () => '' } });
+    document.body.dispatchEvent(ev);
+    // 仮の一覧はどのフォルダも同じ（a.txt がある）ので、上書きの確認が出る
+    await vi.waitFor(() => expect(ui.confirmReq).not.toBeNull());
+    ui.confirmReq!.resolve(true);
+    await vi.waitFor(() => expect(h.move).toHaveBeenCalled());
+    expect(h.upload).not.toHaveBeenCalled();
   });
 
   it('クリップボードに書けなかったときは、バッファを貼る（クリップボードの古い中身は貼らない）', async () => {
@@ -1013,6 +1038,27 @@ describe('OS のクリップボードとの同期', () => {
     await vi.waitFor(() => expect(el.querySelector('.file-explorer-list')).not.toBeNull());
     pasteClick(el);
     // 仮の一覧はどのフォルダも同じ（a.txt がある）ので、上書きの確認が出る
+    await vi.waitFor(() => expect(ui.confirmReq).not.toBeNull());
+    ui.confirmReq!.resolve(true);
+    await vi.waitFor(() => expect(h.copy).toHaveBeenCalledWith('a.txt', 'docs/a.txt', true));
+    expect(h.upload).not.toHaveBeenCalled();
+  });
+
+  it('置き場所がファイルを持たない（Android・WebDAV）ときは、クリップボードに何も書かず（文字も）、バッファだけで貼る', async () => {
+    h.clip.supportsFiles = false;
+    h.clip.text = 'old';
+    const el = await render();
+    explorerSelection.start('a.txt');
+    flushSync();
+    el.querySelector<HTMLButtonElement>('button[aria-label="コピー"]')!.click();
+    flushSync();
+    await Promise.resolve();
+    expect(h.clip.text).toBe('old');
+    expect(h.clip.files).toBeNull();
+    expect(explorerBuffer.clipToken).toBeNull();
+    fileExplorer.open('docs');
+    await vi.waitFor(() => expect(el.querySelector('.file-explorer-list')).not.toBeNull());
+    pasteClick(el);
     await vi.waitFor(() => expect(ui.confirmReq).not.toBeNull());
     ui.confirmReq!.resolve(true);
     await vi.waitFor(() => expect(h.copy).toHaveBeenCalledWith('a.txt', 'docs/a.txt', true));
@@ -3075,7 +3121,7 @@ describe('作成日時・フォルダのサイズの写し・貼り付けの予�
   it('文字・画像がクリップボードにあれば、その先頭・画像を見せる', async () => {
     vi.useFakeTimers();
     try {
-      h.clip = { text: 'こんにちは\n二行目', image: null, writable: true };
+      h.clip = { text: 'こんにちは\n二行目', image: null, files: null, writable: true, supportsFiles: true };
       const el = await render();
       await vi.advanceTimersByTimeAsync(0);
       const wrap = el.querySelector<HTMLElement>('.file-explorer-paste')!;

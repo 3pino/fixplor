@@ -206,6 +206,16 @@ export interface ExplorerHost {
     readNativeImage(): Promise<File | null>;
     /** 文字を貼り付けて作るファイルの名前 */
     textName(): string;
+    /**
+     * コピー・切り取りした項目を、OS のクリップボードにファイルとして書く（任意。省くと、アプリの中のバッファだけ。文字はどちらでも書かない）。
+     * OS のファイルとして渡せる項目（この端末のファイル）を扱う置き場所だけが持つ。
+     */
+    files?: {
+      /** 書く。token は、書いたものの印（貼り付けのとき、まだ自分が書いたままかを確かめる）。書けたら true（書けなかったら false） */
+      write(paths: string[], op: 'copy' | 'move', token: string): Promise<boolean>;
+      /** クリップボードにある、このアプリが書いた印。無ければ（ほかでコピーし直した・空になった）null */
+      token(): Promise<string | null>;
+    };
   };
   download: {
     file(req: { url: string; name: string }): Promise<void>;

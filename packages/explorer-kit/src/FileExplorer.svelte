@@ -869,8 +869,18 @@
   }
 
   // ---- OS のクリップボードとの同期 ----
-  // コピー・切り取りは、項目のパスを OS のクリップボードにも書く。貼り付けは、クリップボードがまだその文字ならバッファを、
-  // ほかでコピーし直していれば（ファイル・画像・文字）そちらを、開いているフォルダへ送る（文字は .txt のファイルにする）
+  // コピー・切り取りは、項目を OS のクリップボードにもファイルとして書く（置き場所ができるとき。文字は書かない）。
+  // 貼り付けは、クリップボードにこちらが書いた印がまだあればバッファを、
+  // ほかでコピーし直していれば（ファイル・画像・文字）そちらを、開いているフォルダへ送る（文字は .txt のファイルにする）。
+  // OS に書けないとき（Android など）は、クリップボードを見ずにバッファを貼る
+
+  /** バッファが、貼るときの元になるか（OS に書いていないなら常に。書いたなら、まだ自分の印がクリップボードにあるときだけ） */
+  async function bufferIsPasteSource(): Promise<boolean> {
+    if (explorerBuffer.empty) return false;
+    const mine = explorerBuffer.clipToken;
+    if (mine === null) return true;
+    return (await host.clipboard.files?.token()) === mine;
+  }
 
   /** クリップボードに何があるか（貼り付けを押せるか）。開いたとき・前面に戻ったとき・コピーしたとき・メニューを開いたときに確かめ直す */
   let clip = $state<ClipboardPeek>({ text: false, image: false });
@@ -892,10 +902,8 @@
     return { kind: 'items', op: explorerBuffer.mode ?? 'copy', names: items.slice(0, PREVIEW_NAMES).map((i) => baseName(i.path)), total: items.length };
   }
   async function loadPastePreview(): Promise<PastePreview> {
-    // バッファをクリップボードに書けていない（結び付いていない）なら、クリップボードは読まない
-    if (!explorerBuffer.empty && explorerBuffer.clipText === null) return bufferPreview();
+    if (await bufferIsPasteSource()) return bufferPreview();
     const text = await host.clipboard.readText();
-    if (!explorerBuffer.empty && (explorerBuffer.clipText === null || explorerBuffer.matchesClip(text))) return bufferPreview();
     const img = await host.clipboard.readImage();
     if (img) return { kind: 'image', url: URL.createObjectURL(img) };
     if (text) return { kind: 'text', text: text.slice(0, PREVIEW_TEXT), more: text.length > PREVIEW_TEXT };
@@ -1021,12 +1029,19 @@
     };
   });
 
-  /** バッファ（項目のパス）を OS のクリップボードにも書く。クリック・タップの処理の中から呼ぶ（でないと拒否される） */
+  /** バッファの項目を、OS のクリップボードにファイルとしても書く（置き場所ができるときだけ。文字は書かない）。書いたら、印をバッファに持つ */
   function syncToClipboard(): void {
-    const text = explorerBuffer.items.map((i) => i.path).join('\n');
-    void host.clipboard.copyText(text).then((ok) => {
+    const files = host.clipboard.files;
+    const mode = explorerBuffer.mode;
+    if (!files || mode === null) {
+      void refreshClip();
+      return;
+    }
+    const paths = explorerBuffer.items.map((i) => i.path);
+    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    void files.write(paths, mode, token).then((ok) => {
       // 書いている間にバッファを入れ替えていなければ、クリップボードと結び付ける
-      if (ok && explorerBuffer.items.map((i) => i.path).join('\n') === text) explorerBuffer.clipText = text;
+      if (ok && explorerBuffer.items.map((i) => i.path).join('\n') === paths.join('\n') && explorerBuffer.mode === mode) explorerBuffer.clipToken = token;
       void refreshClip();
     });
   }
@@ -1034,16 +1049,16 @@
   /** 貼り付け（バーのボタン・空きスペースのメニュー）。OS のクリップボードを読んで、何を貼るか決める */
   async function pasteAny(dir: string = fileExplorer.dir): Promise<void> {
     if (pasting) return;
-    // バッファをクリップボードに書けていない（結び付いていない）なら、クリップボードは読まずにバッファを貼る
-    if (!explorerBuffer.empty && explorerBuffer.clipText === null) return paste(dir);
+    if (await bufferIsPasteSource()) return paste(dir);
     await pasteWith(dir, await host.clipboard.readText(), [], () => host.clipboard.readImage());
   }
 
   /**
-   * クリップボードの中身（files・text・画像）から貼る。ファイルがあればそれ。文字がバッファのもの（コピーしたまま）ならバッファ。
-   * そうでなければ画像、文字（.txt）の順。どれも無ければバッファ
+   * クリップボードの中身（files・text・画像）から貼る。こちらがファイルとして書いた印がまだあれば（コピーしたまま）、ファイルの一覧を読まずにバッファ。
+   * そうでないとき、OS のファイルがあればそれ。無ければ画像、文字（.txt）の順。どれも無ければバッファ
    */
   async function pasteWith(dir: string, text: string | null, files: File[], image: () => Promise<File | null>): Promise<void> {
+    if (explorerBuffer.clipToken !== null && (await bufferIsPasteSource())) return paste(dir);
     if (files.length > 0) {
       const batch = await beginBatch(dir);
       if (!batch) return;
@@ -1051,7 +1066,7 @@
       if (sent.length === 1) renameAfterPaste(dir, sent[0]);
       return;
     }
-    if (!explorerBuffer.empty && (explorerBuffer.clipText === null || explorerBuffer.matchesClip(text))) return paste(dir);
+    if (!explorerBuffer.empty && explorerBuffer.clipToken === null) return paste(dir);
     const img = await image();
     if (img) return renameAfterPaste(dir, await sendOne(dir, img));
     if (text) return renameAfterPaste(dir, await sendOne(dir, new File([text], host.clipboard.textName(), { type: 'text/plain' })));

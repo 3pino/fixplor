@@ -25,14 +25,14 @@ describe('アプリ内の切り取り・コピーのバッファ', () => {
     expect(explorerBuffer.empty).toBe(false);
   });
 
-  it('クリップボードの文字との照合は、改行（\\r\\n・末尾の改行）の違いを許す。複数の項目のパスがテキストとして貼られないように', () => {
-    explorerBuffer.set('copy', [{ path: 'a/x.txt', kind: 'file' }, { path: 'a/y.txt', kind: 'file' }]);
-    expect(explorerBuffer.matchesClip('a/x.txt\na/y.txt')).toBe(false); // まだ結び付けていない
-    explorerBuffer.clipText = 'a/x.txt\na/y.txt';
-    expect(explorerBuffer.matchesClip('a/x.txt\na/y.txt')).toBe(true);
-    expect(explorerBuffer.matchesClip('a/x.txt\r\na/y.txt')).toBe(true);
-    expect(explorerBuffer.matchesClip('a/x.txt\na/y.txt\n')).toBe(true);
-    expect(explorerBuffer.matchesClip('a/x.txt')).toBe(false);
-    expect(explorerBuffer.matchesClip(null)).toBe(false);
+  it('OS のクリップボードに書いた印（clipToken）は、入れ替える・空にすると忘れる', () => {
+    expect(explorerBuffer.clipToken).toBeNull();
+    explorerBuffer.set('copy', [{ path: 'a/x.txt', kind: 'file' }]);
+    explorerBuffer.clipToken = 'tok';
+    explorerBuffer.set('move', [{ path: 'a/y.txt', kind: 'file' }]);
+    expect(explorerBuffer.clipToken).toBeNull();
+    explorerBuffer.clipToken = 'tok';
+    explorerBuffer.clear();
+    expect(explorerBuffer.clipToken).toBeNull();
   });
 });

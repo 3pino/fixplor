@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod fs;
 pub mod platform;
 pub mod webdav;
@@ -192,6 +193,19 @@ fn fs_open(app: tauri::AppHandle, path: String) -> FsResult<()> {
         .map_err(|e| FsError::new("io", format!("開けませんでした: {e}")))
 }
 
+/// コピー・切り取りしたファイルを、OS のクリップボードへ書く（ほかのアプリに貼り付けられる。文字は書かない）。
+/// `op` は copy か move。`token` は、書いたものの印（貼り付けのとき、まだ自分が書いたままかを確かめる）。Windows・Linux だけ
+#[tauri::command]
+async fn clipboard_set_files(app: tauri::AppHandle, paths: Vec<String>, op: String, token: String) -> FsResult<()> {
+    clipboard::set_files(&app, paths, op == "move", token).await
+}
+
+/// クリップボードに、アプリが書いた印がまだあるか（あればその印）。ほかでコピーし直した・対応しない OS なら null
+#[tauri::command]
+async fn clipboard_token(app: tauri::AppHandle) -> FsResult<Option<String>> {
+    clipboard::token(&app).await
+}
+
 /// アプリを終える（Android で、最後のタブを閉じたとき。デスクトップは、ウィンドウを閉じる）
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
@@ -263,6 +277,8 @@ pub fn run() {
             fs_places,
             fs_start_dir,
             fs_open,
+            clipboard_set_files,
+            clipboard_token,
             exit_app,
             webdav::commands::dav_list,
             webdav::commands::dav_stat,

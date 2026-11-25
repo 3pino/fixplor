@@ -1,27 +1,18 @@
 import type { TransferItem, TransferOp } from '../transfer';
 
 /**
- * エクスプローラーの、アプリ内の切り取り・コピーのバッファ（OS のクリップボードとは別。文字・画像の貼り付けには使わない）。
+ * エクスプローラーの、アプリ内の切り取り・コピーのバッファ（文字・画像の貼り付けには使わない）。OS のクリップボードには、ファイルとしても書く（置き場所ができるとき。`clipToken`）。
  * 中身はパスだけ（実体は置き場所にある）。切り取りは貼り付けたら外す。コピーは何度でも貼り付けられる。
  */
 export class ExplorerBuffer {
   mode = $state<TransferOp | null>(null);
   items = $state<TransferItem[]>([]);
   /**
-   * コピー・切り取りのときに OS のクリップボードへ書いた文字（項目のパス）。書けなかったら null。
-   * 貼り付けのとき、クリップボードがまだこの文字なら、このバッファを貼る（ほかでコピーし直していれば、そちらを貼る）
+   * コピー・切り取りのときに OS のクリップボードへファイルとして書いたときの印。書けなかった・書かない置き場所（Android など）は null。
+   * 貼り付けのとき、クリップボードにまだこの印があれば、このバッファを貼る（ほかでコピーし直していれば、そちらを貼る）。
+   * null のときは、クリップボードを見ずにバッファを貼る
    */
-  clipText = $state<string | null>(null);
-
-  /**
-   * クリップボードの文字が、このバッファを書いたときの文字か。改行は、OS・WebView が \r\n に変える・末尾に足すことがあるので、そろえて比べる
-   * （複数の項目のパスは改行でつないでいる。そろえないと、パスの並びをテキストとして貼ってしまう）
-   */
-  matchesClip(text: string | null): boolean {
-    if (this.clipText === null || text === null) return false;
-    const norm = (t: string): string => t.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
-    return norm(text) === norm(this.clipText);
-  }
+  clipToken = $state<string | null>(null);
 
   get empty(): boolean {
     return this.items.length === 0;
@@ -31,7 +22,7 @@ export class ExplorerBuffer {
   set(mode: TransferOp, items: TransferItem[]): void {
     this.mode = mode;
     this.items = [...items];
-    this.clipText = null;
+    this.clipToken = null;
   }
 
   /** 貼り付けたものを外す（切り取りのとき）。残りが無ければ空にする */
@@ -43,7 +34,7 @@ export class ExplorerBuffer {
   clear(): void {
     this.mode = null;
     this.items = [];
-    this.clipText = null;
+    this.clipToken = null;
   }
 
   /** 切り取りの途中か（一覧で薄く出すため） */

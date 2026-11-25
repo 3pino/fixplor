@@ -18,7 +18,7 @@ afterEach(async () => {
   target = undefined;
   h.size.mockReset();
   h.size.mockImplementation(async () => ({ size: 12345, files: 3, dirs: 1 }));
-  h.clip = { text: null, image: null, writable: true };
+  h.clip = { text: null, image: null, files: null, writable: true, supportsFiles: true };
   fileActionRun.mockClear();
 });
 

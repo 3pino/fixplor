@@ -1193,6 +1193,7 @@ dependencies = [
  "bytes",
  "dirs 6.0.0",
  "futures-util",
+ "gtk",
  "keyring",
  "percent-encoding",
  "quick-xml",
@@ -1212,6 +1213,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "trash",
+ "windows",
  "wiremock",
 ]
 

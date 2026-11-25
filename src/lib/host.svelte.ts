@@ -8,6 +8,7 @@ import { errorText } from './labels';
 import { openHref, pathOfOpenHref } from './fs/local';
 import type { Sources } from './fs/sources';
 import { FsError } from './fs/types';
+import { canWriteFiles, fileClipboard } from './osClipboard';
 
 // 共有の部品（エクスプローラー）へ貸す、本体の機能: 通知・確認・「戻る」・ファイルを開く・クリップボード・この端末の種類。
 // 通知・確認・戻るの状態は、土台の Shell（@3pino/app-kit-web/shell）が持つ。
@@ -57,7 +58,12 @@ export function failureText(e: unknown): string {
 }
 
 /** 置き場所が、ファイルを開く・表示の URL から元のパスをたどる口 */
-export type OpenSource = { open: (path: string) => Promise<void>; sources: Sources };
+export type OpenSource = {
+  open: (path: string) => Promise<void>;
+  sources: Sources;
+  /** 画面のパス → OS の絶対パス（この端末のファイルだけが持つ。あれば、コピーを OS のクリップボードへファイルとして書く） */
+  osPath?: (path: string) => string;
+};
 
 /** 項目を、既定のアプリで開く（OS の既定のアプリ・ネットワークの場所は受け取ってから）。開けなければ知らせる */
 export function externalOpener(state: HostState, fs: Pick<OpenSource, 'open'>): (req: { url: string; name: string }) => Promise<void> {
@@ -111,6 +117,8 @@ export function createHost(state: HostState, fs: OpenSource): ExplorerHost {
       readImage: async () => null,
       readNativeImage: async () => null,
       textName: () => `貼り付け ${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`,
+      // コピー・切り取りは、この端末のファイルならファイルとして OS に渡す（Windows・Linux）。文字は書かない。WebDAV・Android・macOS は、アプリの中のバッファだけ
+      files: fs.osPath && canWriteFiles(osName()) ? fileClipboard(fs.osPath) : undefined,
     },
     download: {
       file: openExternally,
