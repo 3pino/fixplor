@@ -91,9 +91,10 @@
 {#if side === 'left'}{@render handle()}{/if}
 
 <style>
+  /* 窓が狭いときは、幅の指定より縮む（隠さない）。縮む下限は min-width */
   .side-pane {
-    flex: none;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 120px;
     min-height: 0;
     overflow: hidden;
     display: flex;
@@ -114,12 +115,5 @@
   .side-resizer-active {
     background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat;
     outline: none;
-  }
-  /* 狭い窓では、場所の欄と一覧を優先して、横のビューは隠す */
-  @media (max-width: 1000px) {
-    .side-pane,
-    .side-resizer {
-      display: none;
-    }
   }
 </style>

@@ -1017,7 +1017,7 @@
           {#key explorer}<ParentView {explorer} entryStyle={(e) => entryStyleOf(e, settings.rules)} />{/key}
         </SidePane>
       {/if}
-      <main class="main">
+      <main class="main" class:main-side={sideViews}>
         <!-- 設定のタブがあるあいだは、他のタブを見ていても作ったままにする（戻ったとき、ホットキーの画面・開いた節・検索の文字が続きから見える） -->
         {#if hasSettingsTab}
           <div class="settings-host" style:display={activeSettings ? 'flex' : 'none'}>
@@ -1183,6 +1183,10 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
+  }
+  /* 横のビュー（親フォルダ・プレビュー）を出しているときは、一覧の幅の下限を残す（横のビューのほうが先に縮む） */
+  .main-side {
+    min-width: 300px;
   }
   .nav-scrim {
     display: none;
