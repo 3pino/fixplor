@@ -445,7 +445,7 @@
   /** 文字・「サブフォルダも」が変わったら、探し直す */
   const onSearchInput = (): void => search.refresh(fileExplorer.dir);
   function searchWindowKey(ev: KeyboardEvent): void {
-    if (!matchesHotkey(ev, keysOf('search')) || (typingIn(ev.target) && !(ev.ctrlKey || ev.metaKey || ev.altKey))) return;
+    if (!matchesHotkey(ev, keysOf('search')) || (typingIn(ev.target) && !(ev.ctrlKey || ev.altKey))) return;
     ev.preventDefault();
     if (search.open) searchInput?.select();
     else openSearch();
@@ -1548,7 +1548,7 @@
     // スクロールバーの上は、囲みにしない
     const r = bodyEl.getBoundingClientRect();
     if (ev.clientX >= r.left + bodyEl.clientWidth || ev.clientY >= r.top + bodyEl.clientHeight) return;
-    bandFrom = { x: ev.clientX, y: ev.clientY, ax: ev.clientX - r.left + bodyEl.scrollLeft, ay: ev.clientY - r.top + bodyEl.scrollTop, base: ev.ctrlKey || ev.metaKey || ev.shiftKey ? explorerSelection.paths() : [], pointerId: ev.pointerId };
+    bandFrom = { x: ev.clientX, y: ev.clientY, ax: ev.clientX - r.left + bodyEl.scrollLeft, ay: ev.clientY - r.top + bodyEl.scrollTop, base: ev.ctrlKey || ev.shiftKey ? explorerSelection.paths() : [], pointerId: ev.pointerId };
   }
 
   function bandMove(ev: PointerEvent): void {
@@ -1706,7 +1706,7 @@
       // 文字以外の押しは、選ぶ・外す（Ctrl・Shift を押しながらなら、名前の上でも選ぶ・外す）
       if (
         explorerSelection.desktop &&
-        !(ev.ctrlKey || ev.metaKey || ev.shiftKey) &&
+        !(ev.ctrlKey || ev.shiftKey) &&
         ev.target instanceof Element &&
         ev.target.closest('.file-explorer-name-text') &&
         !renameBlock(e)
@@ -1716,7 +1716,7 @@
       }
       // PC: Ctrl・Shift を押しながらなら、選びに足す・外す。押さないなら、その項目だけを選ぶ（選んでいる唯一の項目を押したときは、外す）
       const only = explorerSelection.count === 1 && explorerSelection.has(e.path);
-      if (explorerSelection.desktop && !(ev.ctrlKey || ev.metaKey || ev.shiftKey) && !only) explorerSelection.replace([e.path]);
+      if (explorerSelection.desktop && !(ev.ctrlKey || ev.shiftKey) && !only) explorerSelection.replace([e.path]);
       else explorerSelection.toggle(e.path);
       return;
     }

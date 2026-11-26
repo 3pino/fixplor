@@ -874,7 +874,7 @@
   function onKey(ev: KeyboardEvent): void {
     if (hotkeys.recording || ev.defaultPrevented) return;
     const typing = ev.target instanceof Element && ev.target.closest('input, textarea, select, [contenteditable="true"]') !== null;
-    if (typing && !(ev.ctrlKey || ev.metaKey || ev.altKey)) return;
+    if (typing && !(ev.ctrlKey || ev.altKey)) return;
     for (const c of APP_COMMANDS) {
       if (hotkeys.matches(ev, c.id) && runCommand(c.id)) {
         ev.preventDefault();

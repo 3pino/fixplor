@@ -16,7 +16,7 @@ describe('ホットキーの設定', () => {
 
   it('足す（重複なし・書き方をそろえる）・外す', () => {
     expect(addKey(['Ctrl+T'], 'ctrl+y')).toEqual(['Ctrl+T', 'Ctrl+Y']);
-    expect(addKey(['Ctrl+T'], 'Cmd+T')).toEqual(['Ctrl+T']);
+    expect(addKey(['Ctrl+T'], 'ctrl+t')).toEqual(['Ctrl+T']);
     expect(addKey(['Ctrl+T'], 'Hyper+Q')).toEqual(['Ctrl+T']);
     expect(removeKey(['Ctrl+T', 'Ctrl+Y'], 'Ctrl+T')).toEqual(['Ctrl+Y']);
   });

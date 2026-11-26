@@ -1482,7 +1482,7 @@ describe('PC の選択（0 件でも続く。ダブルクリック・Enter で�
     expect(explorerSelection.paths().sort()).toEqual(['a.txt', 'docs']);
     withKey('pic.png', { shiftKey: true });
     expect(explorerSelection.paths().sort()).toEqual(['a.txt', 'docs', 'pic.png']);
-    withKey('docs', { metaKey: true });
+    withKey('docs', { ctrlKey: true });
     expect(explorerSelection.paths().sort()).toEqual(['a.txt', 'pic.png']);
     // 複数選んでいるうちの 1 つを（キー無しで）押すと、それだけにする
     clickRow(el, 'a.txt');
