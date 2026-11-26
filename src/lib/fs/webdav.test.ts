@@ -68,6 +68,40 @@ describe('一覧', () => {
   });
 });
 
+describe('SFTP（接続先が sftp:// なら、sftp_* のコマンド。書き込みの続き・中止は共通）', () => {
+  const SFTP = 'sftp://nas.example:22/home/me/';
+
+  it('一覧・作成・移動・コピー・削除・大きさは sftp_*、接続先とパスをそのまま渡す', async () => {
+    const { fs, calls } = make(() => [raw('a.txt')], { base: SFTP });
+    await fs.api.list('x');
+    await fs.api.mkdir('x/y').catch(() => {});
+    await fs.api.move('a', 'b').catch(() => {});
+    await fs.api.copy('a', 'b').catch(() => {});
+    await fs.api.remove?.('a');
+    await fs.api.size('a').catch(() => {});
+    expect(calls.map((c) => c.cmd)).toEqual(['sftp_list', 'sftp_mkdir', 'sftp_move', 'sftp_copy', 'sftp_remove', 'sftp_size']);
+    expect(calls[0]).toMatchObject({ args: { place: ID, base: SFTP, path: 'x' } });
+  });
+
+  it('書き込みは sftp_put_open で始め、中身を送る・終えるのは WebDAV と同じ dav_put_chunk・dav_put_finish', async () => {
+    const { fs, calls } = make((cmd) => (cmd === 'dav_put_finish' ? raw('n.txt', { path: 'n.txt' }) : undefined), { base: SFTP });
+    await fs.api.write('n.txt', 'abc');
+    expect(calls.map((c) => c.cmd)).toEqual(['sftp_put_open', 'dav_put_chunk', 'dav_put_finish']);
+  });
+
+  it('開くときの受け取りも sftp_download。中止は dav_cancel', async () => {
+    const { fs, calls } = make((cmd) => (cmd === 'sftp_download' ? '/tmp/fixplor-dav/x/a.pdf' : undefined), { base: SFTP });
+    await fs.open('a.pdf');
+    expect(calls.map((c) => c.cmd)).toEqual(['sftp_download', 'fs_open']);
+  });
+
+  it('WebDAV（https）は今までどおり dav_*', async () => {
+    const { fs, calls } = make(() => [raw('a.txt')]);
+    await fs.api.list('');
+    expect(calls[0].cmd).toBe('dav_list');
+  });
+});
+
 describe('書き込み（黙って上書きしない）', () => {
   const opens = (calls: Rec[]) => calls.filter((c) => c.cmd === 'dav_put_open').map((c) => c.args as { ifMatch: string | null; size: number; job: string; path: string });
 

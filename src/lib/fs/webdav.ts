@@ -29,6 +29,8 @@ export type DavOptions = {
   call?: Call;
   /** 隠しファイル（. で始まるもの）を一覧に出すか */
   showHidden?: () => boolean;
+  /** Rust のコマンドの種類（`dav_*` か `sftp_*`）。省くと、接続先の URL（`sftp://` なら sftp、ほかは dav）から決める */
+  proto?: 'dav' | 'sftp';
   /** 進み具合の知らせを受ける（試験で差し替える） */
   onProgress?: (handler: (p: DavProgress) => void) => Promise<() => void>;
 };
@@ -63,6 +65,8 @@ export function davProxyUrl(place: string, base: string, path: string, version: 
 export function createDavFs(options: DavOptions): DavFs {
   const base = options.base;
   const id = options.id;
+  // SFTP も、WebDAV と同じ引数・答えのコマンド（sftp_*）で使う。書き込みの続き・中止（dav_put_chunk・dav_put_finish・dav_cancel）は共通
+  const proto = options.proto ?? (base.startsWith('sftp:') ? 'sftp' : 'dav');
   const baseRun = runner(options.call ?? tauriCall);
   const sources = createSources();
   const proxySrc = options.proxySrc ?? ((p: string) => convertFileSrc(p, PROXY_SCHEME));
@@ -105,7 +109,7 @@ export function createDavFs(options: DavOptions): DavFs {
   const put = async (path: string, body: Blob | ArrayBuffer | string, job: string, cancelled: () => boolean): Promise<DavEntry> => {
     const blob = body instanceof Blob ? body : new Blob([body]);
     // 一覧で読んだ ETag があれば、そのものだけを上書き。無ければ作成（同名があれば exists）
-    await run<void>('dav_put_open', { ...at, path, size: blob.size, ifMatch: etags.get(path) ?? null, job });
+    await run<void>(`${proto}_put_open`, { ...at, path, size: blob.size, ifMatch: etags.get(path) ?? null, job });
     // 開いている間に中止されたとき、取っ手が間に合わなくても止まるように
     if (cancelled()) void run<boolean>('dav_cancel', { job }).catch(() => false);
     const headers = { 'x-job': encodeURIComponent(job) };
@@ -125,33 +129,33 @@ export function createDavFs(options: DavOptions): DavFs {
     // サーバー側の検索は一般には無いので、手元で、浅いフォルダから読む（上限つき。search.ts）
     search: (query, on) => boundedSearch((dir) => api.list(dir), query, on),
     async list(path) {
-      const all = await run<DavEntry[]>('dav_list', { ...at, path });
+      const all = await run<DavEntry[]>(`${proto}_list`, { ...at, path });
       return (showHidden() ? all : all.filter((e) => !e.hidden)).map(entry);
     },
     async write(path, body) {
       return entry(await put(path, body, newJob('w'), () => false));
     },
-    mkdir: async (path) => entry(await run<DavEntry>('dav_mkdir', { ...at, path })),
+    mkdir: async (path) => entry(await run<DavEntry>(`${proto}_mkdir`, { ...at, path })),
     // ゴミ箱は無い（caps.trash: false）。部品は remove を呼ぶ
     trash: () => Promise.reject(new FsError('unsupported', 'この置き場所にはゴミ箱がありません')),
     restore: () => Promise.reject(new FsError('unsupported', 'この置き場所にはゴミ箱がありません')),
     purge: () => Promise.reject(new FsError('unsupported', 'この置き場所にはゴミ箱がありません')),
     async remove(path) {
-      await run<void>('dav_remove', { ...at, path });
+      await run<void>(`${proto}_remove`, { ...at, path });
       forget(path);
     },
     async size(path) {
-      const s = await run<{ size: number; files: number; dirs: number; partial: boolean }>('dav_size', { ...at, path });
+      const s = await run<{ size: number; files: number; dirs: number; partial: boolean }>(`${proto}_size`, { ...at, path });
       // 途中までの値を、全体の値として見せない
       if (s.partial) throw new FsError('too_large', 'フォルダが大きく、数えきれませんでした');
       return { size: s.size, files: s.files, dirs: s.dirs };
     },
     async move(from, to, overwrite) {
-      const e = entry(await run<DavEntry>('dav_move', { ...at, from, to, overwrite: overwrite === true }));
+      const e = entry(await run<DavEntry>(`${proto}_move`, { ...at, from, to, overwrite: overwrite === true }));
       forget(from);
       return e;
     },
-    copy: async (from, to, overwrite) => entry(await run<DavEntry>('dav_copy', { ...at, from, to, overwrite: overwrite === true })),
+    copy: async (from, to, overwrite) => entry(await run<DavEntry>(`${proto}_copy`, { ...at, from, to, overwrite: overwrite === true })),
     upload(path, file, onProg) {
       const job = newJob('up');
       let aborted = false;
@@ -200,7 +204,7 @@ export function createDavFs(options: DavOptions): DavFs {
     base,
     sources,
     async open(path) {
-      const local = await run<string>('dav_download', { ...at, path, job: newJob('dl') });
+      const local = await run<string>(`${proto}_download`, { ...at, path, job: newJob('dl') });
       await run<void>('fs_open', { path: local });
     },
     isMissing: (e) => e instanceof FsError && (e.code === 'not_found' || e.code === 'not_dir'),

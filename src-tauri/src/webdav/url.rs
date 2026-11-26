@@ -7,11 +7,20 @@ use reqwest::Url;
 /// URL の 1 段として符号化しない文字（RFC 3986 の unreserved）
 const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_').remove(b'~');
 
-/// 接続先の URL（`https://host/dav/`）。パスの終わりは必ず `/`
+/// 接続先の URL（`https://host/dav/`）。パスの終わりは必ず `/`。WebDAV の接続先（http・https）
 pub fn parse_base(raw: &str) -> FsResult<Url> {
+    parse_with(raw, &["http", "https"], "URL は http:// か https:// で始めてください")
+}
+
+/// 接続先の URL（WebDAV の http・https に加えて、SFTP の `sftp://host:22/home/me/`）。資格情報・証明書の固定で使う
+pub fn parse_any(raw: &str) -> FsResult<Url> {
+    parse_with(raw, &["http", "https", "sftp"], "URL は http://・https://・sftp:// で始めてください")
+}
+
+fn parse_with(raw: &str, schemes: &[&str], bad_scheme: &str) -> FsResult<Url> {
     let mut url = Url::parse(raw.trim()).map_err(|_| FsError::new("invalid", format!("URL を読めません: {raw}")))?;
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(FsError::new("invalid", "URL は http:// か https:// で始めてください"));
+    if !schemes.contains(&url.scheme()) {
+        return Err(FsError::new("invalid", bad_scheme));
     }
     if url.host_str().is_none() {
         return Err(FsError::new("invalid", "URL にホスト名がありません"));
@@ -95,6 +104,16 @@ mod tests {
         assert_eq!(join(&base(), "docs/a b#?.txt", false).unwrap().as_str(), "https://h.example/dav/docs/a%20b%23%3F.txt");
         assert_eq!(join(&base(), "日本/語", true).unwrap().as_str(), "https://h.example/dav/%E6%97%A5%E6%9C%AC/%E8%AA%9E/");
         assert_eq!(join(&base(), "a%2Fb", false).unwrap().as_str(), "https://h.example/dav/a%252Fb");
+    }
+
+    #[test]
+    fn sftp_base_is_accepted_only_by_parse_any() {
+        assert_eq!(parse_any("sftp://h.example:2222/home/me").unwrap().as_str(), "sftp://h.example:2222/home/me/");
+        assert_eq!(parse_any("sftp://h.example").unwrap().as_str(), "sftp://h.example/");
+        assert_eq!(parse_any("https://h.example/dav").unwrap().as_str(), "https://h.example/dav/");
+        assert_eq!(parse_base("sftp://h.example/").unwrap_err().code, "invalid");
+        assert_eq!(parse_any("ftp://h.example/").unwrap_err().code, "invalid");
+        assert_eq!(parse_any("sftp://u:p@h/").unwrap_err().code, "invalid");
     }
 
     #[test]

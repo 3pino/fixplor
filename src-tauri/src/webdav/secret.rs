@@ -7,7 +7,7 @@
 //! - 暗号化されない http へは送らない（この端末の中の http だけは許す）。
 //! - 読んだ値は、このプロセスの中に覚える（キーチェーンへの問い合わせを、要求のたびにしない）。
 
-use super::url::parse_base;
+use super::url::parse_any;
 use crate::fs::{FsError, FsResult};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,11 @@ impl From<Unavailable> for FsError {
 struct Stored {
     base: String,
     user: String,
+    /// SFTP で鍵を使うときは、鍵のパスフレーズ（無ければ空）
     password: String,
+    /// SFTP の秘密鍵（OpenSSH などの文章そのまま）。パスワードで入るときは無い
+    #[serde(default)]
+    key: Option<String>,
 }
 
 /// 画面へ返す、保管している資格情報の様子（パスワードは含めない）
@@ -46,12 +50,25 @@ struct Stored {
 pub struct CredInfo {
     pub user: String,
     pub base: String,
+    /// 秘密鍵を保管している（SFTP）
+    pub has_key: bool,
+}
+
+/// SFTP の認証に使う資格情報
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SshAuth {
+    pub user: String,
+    /// パスワード（鍵があるときは、鍵のパスフレーズ。無ければ None）
+    pub password: Option<String>,
+    pub key: Option<String>,
 }
 
 /// 暗号化されていない http へ、パスワードを送ってよい場所か（https と、この端末の中だけ）
 pub fn may_send_credentials(url: &Url) -> bool {
     match url.scheme() {
         "https" => true,
+        // SSH は、経路が暗号化されている
+        "sftp" => true,
         "http" => {
             let Some(h) = url.host_str() else { return false };
             h.eq_ignore_ascii_case("localhost")
@@ -89,12 +106,18 @@ impl Creds {
 
     /// 保管している資格情報の様子（無ければ `None`）。パスワードは返さない
     pub fn info(&self, place: &str) -> FsResult<Option<CredInfo>> {
-        Ok(self.load(place)?.map(|s| CredInfo { user: s.user, base: s.base }))
+        Ok(self.load(place)?.map(|s| CredInfo { user: s.user, base: s.base, has_key: s.key.is_some() }))
     }
 
     /// 保管する。`password` が無ければ、保管済みのパスワードを使い続ける（ユーザー名だけを変える。接続先が変わるなら断る）
     pub fn set(&self, place: &str, base: &str, user: &str, password: Option<&str>) -> FsResult<()> {
-        let base_url = parse_base(base)?;
+        self.set_with_key(place, base, user, password, None)
+    }
+
+    /// `set` に、SFTP の秘密鍵を足したもの。`key` が `None` なら保管済みの鍵を使い続け（接続先が同じとき）、`Some("")` なら鍵を外し、文章があればそれに替える。
+    /// 鍵があるときの `password` は、鍵のパスフレーズ（空でもよい）
+    pub fn set_with_key(&self, place: &str, base: &str, user: &str, password: Option<&str>, key: Option<&str>) -> FsResult<()> {
+        let base_url = parse_any(base)?;
         if user.is_empty() {
             return Err(FsError::new("invalid", "ユーザー名がありません"));
         }
@@ -104,18 +127,30 @@ impl Creds {
         if !may_send_credentials(&base_url) {
             return Err(FsError::new("invalid", NOT_SECURE));
         }
+        let same_base = |old: &Stored| old.base == base_url.as_str();
         let password = match password {
             Some(p) => p.to_string(),
             None => {
                 let old = self.load(place)?.ok_or_else(|| FsError::new("invalid", "パスワードがありません"))?;
                 // 別のサーバーへ、保管したパスワードを引き継がない（接続先を変えるときは、入れ直してもらう）
-                if old.base != base_url.as_str() {
+                if !same_base(&old) {
                     return Err(FsError::new("invalid", "接続先を変えるときは、パスワードも入れ直してください"));
                 }
                 old.password
             }
         };
-        let stored = Stored { base: base_url.as_str().to_string(), user: user.to_string(), password };
+        let key = match key {
+            Some("") => None,
+            Some(k) => {
+                if base_url.scheme() != "sftp" {
+                    return Err(FsError::new("invalid", "秘密鍵は sftp:// の接続先だけで使えます"));
+                }
+                Some(k.to_string())
+            }
+            // 保管済みの鍵は、接続先が同じときだけ使い続ける
+            None => self.load(place)?.filter(|old| same_base(old)).and_then(|old| old.key),
+        };
+        let stored = Stored { base: base_url.as_str().to_string(), user: user.to_string(), password, key };
         let raw = serde_json::to_string(&stored).map_err(|e| FsError::new("io", e.to_string()))?;
         // 先にキーチェーンへ。書けなければ、覚えも変えない
         self.store.set(place, &raw)?;
@@ -141,6 +176,15 @@ impl Creds {
             return Err(FsError::new("auth", NOT_SECURE));
         }
         Ok(Some((s.user, s.password)))
+    }
+
+    /// SFTP の認証に使う資格情報。保管が無ければ `None`。保管が別の接続先のものなら、送らずに `auth` の失敗にする
+    pub fn for_ssh(&self, place: &str, base: &Url) -> FsResult<Option<SshAuth>> {
+        let Some(s) = self.load(place)? else { return Ok(None) };
+        if s.base != base.as_str() {
+            return Err(FsError::new("auth", "保管している資格情報は、この接続先のものではありません。置き場所を直して、入れ直してください"));
+        }
+        Ok(Some(SshAuth { user: s.user, password: Some(s.password).filter(|p| !p.is_empty()), key: s.key }))
     }
 }
 

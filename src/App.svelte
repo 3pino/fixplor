@@ -658,7 +658,7 @@
     return e instanceof FsError && (e.code === 'keychain' || e.code === 'invalid') ? e.message : failureText(e);
   }
 
-  async function saveDialog(name: string, url: string, cred: { user: string; password: string | null } | null): Promise<string | null> {
+  async function saveDialog(name: string, url: string, cred: { user: string; password: string | null; key: string | null } | null): Promise<string | null> {
     const editing = dialog?.place;
     const hadCred = dialog?.cred != null;
     const r = editing ? saved.update(editing.id, name, url) : saved.add(name, url);
@@ -666,7 +666,7 @@
     // 接続先を変えたら、前の接続先への固定は使わない（残さない）
     if (editing && editing.url !== r.place.url) await pins.clear(editing.id).catch(() => {});
     try {
-      if (cred) await creds.set(r.place.id, r.place.url, cred.user, cred.password);
+      if (cred) await creds.set(r.place.id, r.place.url, cred.user, cred.password, cred.key);
       else if (hadCred) await creds.clear(r.place.id);
     } catch (e) {
       // 資格情報を保管できなかったので、置き場所の覚えも元に戻す（認証のない置き場所に見えてしまわないように）

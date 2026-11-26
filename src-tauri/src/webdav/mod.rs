@@ -6,7 +6,7 @@ pub mod commands;
 pub mod pin;
 pub mod proxy;
 pub mod secret;
-mod url;
+pub mod url;
 mod xml;
 
 pub use client::{build_client, client_builder, net_error, quote_etag, status_error, Ctx, Dav, DavEntry, Progress, SIZE_DIR_LIMIT};

@@ -9,6 +9,12 @@ describe('URL の確かめ', () => {
     expect(checkUrl('https://h.example')).toEqual({ ok: true, url: 'https://h.example/' });
   });
 
+  it('sftp:// も受ける（ポート・パスを保ち、末尾の / を補う）。ユーザー名つきは断る', () => {
+    expect(checkUrl('sftp://nas.example')).toEqual({ ok: true, url: 'sftp://nas.example/' });
+    expect(checkUrl('sftp://nas.example:2222/home/me')).toEqual({ ok: true, url: 'sftp://nas.example:2222/home/me/' });
+    expect(checkUrl('sftp://me@nas.example/').ok).toBe(false);
+  });
+
   it('空・読めない・別の種類・ユーザー名つきは理由つきで断る', () => {
     for (const bad of ['', '   ', 'not a url', 'ftp://h/', 'file:///etc', 'javascript:alert(1)', 'https://u:p@h/', 'https://u@h/']) {
       const r = checkUrl(bad);

@@ -7,7 +7,7 @@
 //! - 確認（`probe`）は、握手の途中で止める。HTTP の要求は 1 つも送らない（資格情報も送らない）。
 
 use super::client::{client_builder, net_error};
-use super::url::parse_base;
+use super::url::{parse_any, parse_base};
 use crate::fs::{FsError, FsResult};
 use reqwest::{Client, Url};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -106,11 +106,11 @@ impl Pins {
         self.map.lock().unwrap().get(place).map(|r| PinInfo { base: r.base.clone(), fingerprint: r.fingerprint.clone() })
     }
 
-    /// 固定する（置き場所の前の固定は置き換える）。https の接続先だけ
+    /// 固定する（置き場所の前の固定は置き換える）。https の接続先（証明書の指紋）と、sftp の接続先（ホスト鍵の指紋）だけ
     pub fn set(&self, place: &str, base: &str, fingerprint: &str) -> FsResult<()> {
-        let url = parse_base(base)?;
-        if url.scheme() != "https" {
-            return Err(FsError::new("invalid", "証明書の固定は https の接続先だけです"));
+        let url = parse_any(base)?;
+        if !matches!(url.scheme(), "https" | "sftp") {
+            return Err(FsError::new("invalid", "証明書・ホスト鍵の固定は https と sftp の接続先だけです"));
         }
         let fp = parse_fingerprint(fingerprint)?;
         let mut map = self.map.lock().unwrap();

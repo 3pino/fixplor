@@ -1,6 +1,7 @@
 pub mod clipboard;
 pub mod fs;
 pub mod platform;
+pub mod sftp;
 pub mod webdav;
 
 use fs::{Entry, FsError, FsResult, Place, Size};
@@ -280,6 +281,15 @@ pub fn run() {
             clipboard_set_files,
             clipboard_token,
             exit_app,
+            sftp::commands::sftp_list,
+            sftp::commands::sftp_stat,
+            sftp::commands::sftp_mkdir,
+            sftp::commands::sftp_put_open,
+            sftp::commands::sftp_move,
+            sftp::commands::sftp_copy,
+            sftp::commands::sftp_remove,
+            sftp::commands::sftp_size,
+            sftp::commands::sftp_download,
             webdav::commands::dav_list,
             webdav::commands::dav_stat,
             webdav::commands::dav_mkdir,

@@ -21,8 +21,8 @@ describe('資格情報の口（Rust へ渡すだけ）', () => {
     await creds.clear('p1');
     expect(calls).toEqual([
       ['dav_cred_info', { place: 'p1' }],
-      ['dav_cred_set', { place: 'p1', base: 'https://h/', user: 'taro', password: 'pw' }],
-      ['dav_cred_set', { place: 'p1', base: 'https://h/', user: 'taro', password: null }],
+      ['dav_cred_set', { place: 'p1', base: 'https://h/', user: 'taro', password: 'pw', key: null }],
+      ['dav_cred_set', { place: 'p1', base: 'https://h/', user: 'taro', password: null, key: null }],
       ['dav_cred_clear', { place: 'p1' }],
     ]);
   });

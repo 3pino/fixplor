@@ -281,7 +281,7 @@ describe('認証（Basic・OS のキーチェーン）', () => {
     await settle();
     submit();
     await settle();
-    expect(credSets()).toEqual([{ place: places.list[0].id, base: 'https://nas.example/dav/', user: 'taro', password: 's3cret' }]);
+    expect(credSets()).toEqual([{ place: places.list[0].id, base: 'https://nas.example/dav/', user: 'taro', password: 's3cret', key: null }]);
     expect(localStorage.getItem('fixplor.places')).not.toMatch(/s3cret|taro/);
     expect(JSON.stringify(Object.fromEntries(Object.entries(localStorage)))).not.toContain('s3cret');
     expect(sideNames()).toEqual(['me', '自宅']);

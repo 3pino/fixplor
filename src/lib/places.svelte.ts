@@ -1,6 +1,6 @@
 import { read, write } from './settings.svelte';
 
-// 追加したネットワークの置き場所（WebDAV）。名前と URL だけを、各デバイスに保存する（資格情報は、まだ持たない）。
+// 追加したネットワークの置き場所（WebDAV・SFTP）。名前と URL だけを、各デバイスに保存する（資格情報は、まだ持たない）。
 // 置き場所を消しても、サーバーのファイルは消えない（覚えを外すだけ）。
 
 export type DavPlace = { id: string; name: string; url: string };
@@ -17,9 +17,9 @@ export function checkUrl(raw: string): UrlCheck {
   try {
     u = new URL(text);
   } catch {
-    return { ok: false, reason: 'URL を読めません（https://… の形で入力してください）' };
+    return { ok: false, reason: 'URL を読めません（https://… や sftp://… の形で入力してください）' };
   }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return { ok: false, reason: 'URL は http:// か https:// で始めてください' };
+  if (u.protocol !== 'http:' && u.protocol !== 'https:' && u.protocol !== 'sftp:') return { ok: false, reason: 'URL は http://・https://・sftp:// で始めてください' };
   if (u.username !== '' || u.password !== '') return { ok: false, reason: 'URL にユーザー名・パスワードは書けません' };
   u.search = '';
   u.hash = '';

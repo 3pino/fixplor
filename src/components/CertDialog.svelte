@@ -25,6 +25,11 @@
     onclose: () => void;
   } = $props();
 
+  // SFTP は、証明書ではなくサーバーのホスト鍵（SSH の身元）を確かめる
+  // svelte-ignore state_referenced_locally
+  const ssh = place.url.startsWith('sftp:');
+  const subject = ssh ? 'ホスト鍵' : '証明書';
+
   let phase = $state<{ kind: 'loading' } | { kind: 'error'; text: string } | { kind: 'trusted' } | { kind: 'cert'; fingerprint: string; notAfter: string | null }>({ kind: 'loading' });
   let error = $state('');
   let busy = $state(false);
@@ -49,7 +54,7 @@
   }
 </script>
 
-<Modal title={previous ? '証明書が変わりました' : '証明書を確認'} {onclose}>
+<Modal title={previous ? `${subject}が変わりました` : `${subject}を確認`} {onclose}>
   <div class="cert">
     <p class="cert-target">{place.name}（{place.url}）</p>
     {#if phase.kind === 'loading'}
@@ -57,21 +62,25 @@
     {:else if phase.kind === 'error'}
       <p class="cert-error" role="alert">確かめられませんでした: {phase.text}</p>
     {:else if phase.kind === 'trusted'}
-      <p class="cert-note" role="status">このサーバーの証明書は、この PC が信頼しています。固定は要りません（再読み込みしてください）。</p>
+      <p class="cert-note" role="status">このサーバーの{subject}は、この PC が信頼しています。固定は要りません（再読み込みしてください）。</p>
     {:else}
       {#if previous}
-        <p class="cert-warn" role="alert">前に信頼した証明書と違います。サーバーの証明書を入れ替えたのでなければ、別のものに成り代わられているかもしれません。</p>
+        <p class="cert-warn" role="alert">前に信頼した{subject}と違います。サーバーの{subject}を入れ替えたのでなければ、別のものに成り代わられているかもしれません。</p>
         <p class="cert-label">前に信頼した指紋</p>
         <code class="cert-fp cert-fp-old">{formatFingerprint(previous)}</code>
         <p class="cert-label">いま示された指紋</p>
       {:else}
-        <p class="cert-note">このサーバーの証明書は、公的な認証局では確認できません。サーバーの管理者から聞いた指紋（SHA-256）と同じときだけ、信頼してください。</p>
+        {#if ssh}
+          <p class="cert-note">初めてつなぐサーバーです。サーバーの管理者から聞いた、ホスト鍵の指紋（SHA-256。サーバーで <code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> などで確かめられます）と同じときだけ、信頼してください。</p>
+        {:else}
+          <p class="cert-note">このサーバーの証明書は、公的な認証局では確認できません。サーバーの管理者から聞いた指紋（SHA-256）と同じときだけ、信頼してください。</p>
+        {/if}
         <p class="cert-label">指紋（SHA-256）</p>
       {/if}
       <code class="cert-fp">{formatFingerprint(phase.fingerprint)}</code>
       {#if expiryText(phase.notAfter)}<p class="cert-note">有効期限: {expiryText(phase.notAfter)}</p>{/if}
-      {#if same}<p class="cert-note">前に信頼した証明書と同じです。</p>{/if}
-      <p class="cert-note">信頼すると、この場所は、この証明書だけを受け入れます（期限や名前は見ません）。あとから外せます。</p>
+      {#if same}<p class="cert-note">前に信頼した{subject}と同じです。</p>{/if}
+      <p class="cert-note">信頼すると、この場所は、この{subject}だけを受け入れます{ssh ? '' : '（期限や名前は見ません）'}。あとから外せます。</p>
     {/if}
     {#if error}<p class="cert-error" role="alert">{error}</p>{/if}
     <div class="modal-actions">
@@ -80,7 +89,7 @@
       {/if}
       <Button onclick={onclose}>{phase.kind === 'cert' ? 'キャンセル' : '閉じる'}</Button>
       {#if phase.kind === 'cert'}
-        <Button class="cert-trust" variant="primary" disabled={busy} onclick={() => void trust()}>この証明書を信頼する</Button>
+        <Button class="cert-trust" variant="primary" disabled={busy} onclick={() => void trust()}>この{subject}を信頼する</Button>
       {/if}
     </div>
   </div>

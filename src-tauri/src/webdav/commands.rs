@@ -19,10 +19,10 @@ use tauri::{Emitter, State};
 pub struct Jobs(Mutex<HashMap<String, AbortHandle>>);
 
 impl Jobs {
-    fn add(&self, id: &str, h: AbortHandle) {
+    pub fn add(&self, id: &str, h: AbortHandle) {
         self.0.lock().unwrap().insert(id.to_string(), h);
     }
-    fn done(&self, id: &str) {
+    pub fn done(&self, id: &str) {
         self.0.lock().unwrap().remove(id);
     }
     /// 中止する。動いていなければ false
@@ -63,6 +63,8 @@ pub struct Conns {
     pub pins: Arc<Pins>,
     /// 固定のある置き場所の入れ物（置き場所と指紋ごと。つないだままの接続を使い回す）
     pinned: Arc<Mutex<HashMap<(String, Fingerprint), reqwest::Client>>>,
+    /// SFTP の接続（置き場所ごとにつないでおく）
+    pub sftp: Arc<crate::sftp::Pool>,
 }
 
 impl Conns {
@@ -71,7 +73,7 @@ impl Conns {
     }
 
     pub fn with_pins(store: Arc<dyn SecretStore>, pins: Pins) -> Self {
-        Self { http: build_client(), creds: Arc::new(Creds::new(store)), pins: Arc::new(pins), pinned: Arc::default() }
+        Self { http: build_client(), creds: Arc::new(Creds::new(store)), pins: Arc::new(pins), pinned: Arc::default(), sftp: Arc::default() }
     }
 
     /// 置き場所の入れ物。固定があれば、その証明書だけを受け入れるもの。無ければ共通のもの
@@ -112,6 +114,11 @@ impl Puts {
     /// 試験用: `dav_put_open` と同じ登録
     #[cfg(test)]
     pub fn insert_for_test(&self, job: &str, tx: tokio::sync::mpsc::Sender<Bytes>, task: tokio::task::JoinHandle<FsResult<DavEntry>>) {
+        self.insert(job, tx, task);
+    }
+
+    /// 書き込みを登録する（`dav_put_chunk`・`dav_put_finish` が、job の名前で見つける。SFTP もこれを使う）
+    pub fn insert(&self, job: &str, tx: tokio::sync::mpsc::Sender<Bytes>, task: tokio::task::JoinHandle<FsResult<DavEntry>>) {
         self.0.lock().unwrap().insert(job.to_string(), PutState { tx, task });
     }
 }
@@ -128,7 +135,7 @@ struct ProgressEvent<'a> {
     total: u64,
 }
 
-fn reporter(app: tauri::AppHandle, job: Option<String>) -> Option<Progress> {
+pub fn reporter(app: tauri::AppHandle, job: Option<String>) -> Option<Progress> {
     let job = job?;
     // 1% 進むごと（と、最後）に知らせる
     let last = Arc::new(Mutex::new(u64::MAX));
@@ -282,7 +289,7 @@ pub async fn dav_download(app: tauri::AppHandle, conns: State<'_, Conns>, jobs: 
 }
 
 /// 受け取り先（一時のフォルダの下に、受け取りごとの新しいフォルダ）
-fn temp_dest(name: &str) -> FsResult<PathBuf> {
+pub fn temp_dest(name: &str) -> FsResult<PathBuf> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let dir = temp_root().join(format!("{nanos:x}-{}", std::process::id()));
@@ -328,9 +335,9 @@ pub async fn dav_cred_info(conns: State<'_, Conns>, place: String) -> FsResult<O
 
 /// 資格情報を保管する（OS のキーチェーンだけ）。`password` が無ければ、保管済みのパスワードを使い続ける
 #[tauri::command]
-pub async fn dav_cred_set(conns: State<'_, Conns>, place: String, base: String, user: String, password: Option<String>) -> FsResult<()> {
+pub async fn dav_cred_set(conns: State<'_, Conns>, place: String, base: String, user: String, password: Option<String>, key: Option<String>) -> FsResult<()> {
     let creds = conns.creds.clone();
-    tokio::task::spawn_blocking(move || creds.set(&place, &base, &user, password.as_deref())).await.map_err(|e| FsError::new("io", e.to_string()))?
+    tokio::task::spawn_blocking(move || creds.set_with_key(&place, &base, &user, password.as_deref(), key.as_deref())).await.map_err(|e| FsError::new("io", e.to_string()))?
 }
 
 /// 保管している資格情報を消す
@@ -343,6 +350,10 @@ pub async fn dav_cred_clear(conns: State<'_, Conns>, place: String) -> FsResult<
 /// 証明書を確かめる。通常の確かめで通れば `trusted`。通らなければ、示された証明書の指紋（握手だけ。要求は送らない）
 #[tauri::command]
 pub async fn dav_cert_probe(base: String) -> FsResult<Probe> {
+    // sftp:// は、証明書ではなくホスト鍵の指紋を確かめる
+    if base.trim_start().starts_with("sftp:") {
+        return crate::sftp::probe(&base).await;
+    }
     probe(&base).await
 }
 

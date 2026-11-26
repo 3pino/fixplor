@@ -59,6 +59,51 @@ pub fn parse_path(uri_path: &str) -> Option<(String, String, String)> {
     Some((place, base, rel))
 }
 
+/// SFTP の置き場所の中身。Range は、範囲が 1 つのものだけを、そのまま読む（メモリに載せる大きさの上限は `max`）
+async fn serve_sftp(conns: &Conns, method: &str, place: &str, base: &str, rel: &str, range: Option<&str>, max: u64) -> ProxyResponse {
+    use crate::sftp::ops::{self, Range, Wanted};
+    let total = match crate::sftp::pool::with(conns, place, base, |c| {
+        let rel = rel.to_string();
+        async move { ops::file_size(&c.sftp, &c.root, &rel).await }
+    })
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => return plain(status_of(&e), &e.message),
+    };
+    let (status, part) = match ops::parse_range(range, total) {
+        Wanted::Unsatisfiable => return ProxyResponse { status: 416, headers: cors(vec![("Content-Range", format!("bytes */{total}"))]), body: vec![] },
+        Wanted::Part(r) => (206, Some(r)),
+        Wanted::Full if total == 0 => (200, None),
+        Wanted::Full => (200, Some(Range { start: 0, end: total - 1 })),
+    };
+    let len = part.map_or(0, |r| r.len());
+    let name = rel.rsplit('/').next().unwrap_or("");
+    let mut headers = vec![("Content-Type", ops::mime_of(name).to_string()), ("Accept-Ranges", "bytes".to_string())];
+    if let (206, Some(r)) = (status, part) {
+        headers.push(("Content-Range", format!("bytes {}-{}/{total}", r.start, r.end)));
+    }
+    headers.push(("Cache-Control", "private, max-age=3600".into()));
+    headers.push(("X-Content-Type-Options", "nosniff".into()));
+    if method == "HEAD" {
+        headers.push(("Content-Length", len.to_string()));
+        return ProxyResponse { status, headers: cors(headers), body: vec![] };
+    }
+    if len > max {
+        return plain(413, "大きすぎて、表示できません");
+    }
+    let Some(r) = part else { return ProxyResponse { status, headers: cors(headers), body: vec![] } };
+    match crate::sftp::pool::with(conns, place, base, |c| {
+        let rel = rel.to_string();
+        async move { ops::read_range(&c.sftp, &c.root, &rel, r).await }
+    })
+    .await
+    {
+        Ok(body) => ProxyResponse { status, headers: cors(headers), body },
+        Err(e) => plain(status_of(&e), &e.message),
+    }
+}
+
 /// 1 件の要求に答える（Tauri に依らない。`lib.rs` のスキームの受け口が呼ぶ）
 pub async fn serve(conns: &Conns, method: &str, uri_path: &str, range: Option<&str>) -> ProxyResponse {
     serve_limited(conns, method, uri_path, range, PROXY_MAX).await
@@ -72,6 +117,9 @@ pub async fn serve_limited(conns: &Conns, method: &str, uri_path: &str, range: O
         _ => return plain(405, "GET だけ使えます"),
     }
     let Some((place, base, rel)) = parse_path(uri_path) else { return plain(400, "URL が正しくありません") };
+    if base.trim_start().starts_with("sftp:") {
+        return serve_sftp(conns, method, &place, &base, &rel, range, max).await;
+    }
     let dav = match conns.dav(&place, &base).await {
         Ok(d) => d,
         Err(e) => return plain(status_of(&e), &e.message),
